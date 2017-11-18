@@ -6,7 +6,7 @@ The `diskload` MATLAB function computes the response to a uniform surface pressu
 
 The elastic response is computed using user-supplied elastic loading Love numbers (h,k,l) generated using a specific elastic structure model for the Earth. 
 
-[Documentation is available.](https://kisonecat.github.io/diskload/index.html).
+[Documentation is available.](https://kisonecat.github.io/diskload/index.html)
 
 This code is described in the following publication:
 
