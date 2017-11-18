@@ -30,10 +30,10 @@ function [U,V,G]=sphericaldiskload(alpha,icomp,theta,w,nmax,LN,EM)
 %          are complete thru that degree,so as to satisfy Bevis et al. 
 %          (2016)s Rule of Thump (ROT) for a good approximation. Otherwise
 %          nmax will be set to the highest value of n in LN.
-%    LN   the eastic loading Love numbers (LN), a structure with fields
+%    LN   the elastic loading Love numbers (LN), a structure with fields
 %           LN.h  (n+1)-vector containing Love number h for degrees 0:n
 %           LN.k  (n+1)-vector containing Love number k for degrees 0:n
-%           LN.k  (n+1)-vector containing Love number l for degrees 0:n
+%           LN.l  (n+1)-vector containing Love number l for degrees 0:n
 %    EM   (optional) spherical Earth model structure with fields
 %             EM.r    radius of the Earth in km. Defaults to 6371.0 km
 %            EM.grav  surface gravity in m/s2.   Defaults to 9.8046961 m/s2
