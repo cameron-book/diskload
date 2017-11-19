@@ -78,7 +78,8 @@ function [U,V,G]=sphericaldiskload(alpha,icomp,theta,w,nmax,LN,EM)
 
 % Define or compute some constants
 
-ggg=6.67384e-11;        % Newton's constant (SI units) 
+% The 2014 CODATA-recommended value of the gravitational constant in SI units
+ggg=6.6740831e-11;        % Newton's constant (SI units) 
 if nargin<7
     Re=6371;            % Radius of the Earth (km)
     grav=9.8046961;     % Surface gravity (m/s2)
