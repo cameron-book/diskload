@@ -480,7 +480,7 @@ double f (double t, void *params)
 }
 
 double diskload_core_H(double x,double y) {
-  int nmax = 400000;
+  int nmax = 40000;
   double result = 0.0;
   int n;
 
