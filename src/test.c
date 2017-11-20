@@ -98,22 +98,34 @@ int main( void ) {
   printf( "%e %e %e\n", uU, vU, gU );
   printf( "%e %e %e\n", u, v, g );
 
-  SECTION( "Test the globally compensated case via truncation with N = 400k" );
-  double uC, vC, gC;
-  e = diskload_truncated( alpha, Compensated, theta, w, 400000, love, &DefaultEarthModel,
-                                        &uC, &vC, &gC );
-  ASSERT( e == E_SUCCESS );
+  int i;
+  for(i = 0; i<5;i++ ) {
+    double range = 0.2;
+    alpha = (double)rand()/(double)(RAND_MAX/range);
+    theta = (double)rand()/(double)(RAND_MAX/range);    
+    
+    SECTION( "Test the globally compensated case via truncation with N = 400k" );
+    double uC, vC, gC;
+    
+    e = diskload_truncated( alpha, Compensated, theta, w, 400000, love, &DefaultEarthModel,
+                            &uC, &vC, &gC );
+    ASSERT( e == E_SUCCESS );
 
-  SECTION( "The compensated hypergeometric core with N = 40k is close to truncated N = 400k" );
-  e = diskload_hypergeometric( alpha, Compensated, theta, w, 40000, love, &DefaultEarthModel,
-                                        &u, &v, &g );
-  printf( "%e %e %e\n", uC, vC, gC );
-  printf( "%e %e %e\n", u, v, g );
-  ASSERT( e == E_SUCCESS );
-  ASSERT( fabs( ( uC - u ) / u ) < 10e-7 );
-  ASSERT( fabs( ( vU - v ) / v ) < 10e-7 );
-  ASSERT( fabs( ( gC - g ) / g ) < 10e-7 );
-
+    SECTION( "Compensated hypergeometric (N = 40k) near truncated (N = 400k)" );
+    printf( BLUE "   (alpha = %e, theta = %e)\n\n" RESET, alpha, theta );
+    
+    e = diskload_hypergeometric( alpha, Compensated, theta, w, 40000, love, &DefaultEarthModel,
+                                 &u, &v, &g );
+    
+    //printf( "%e %e %e\n", uC, vC, gC );
+    //printf( "%e %e %e\n", u, v, g );
+    //printf( "%e %e %e\n", fabs( ( uC - u ) / u ), fabs( ( vU - v ) / v ), fabs( ( gC - g ) / g ) );    
+    
+    ASSERT( e == E_SUCCESS );
+    ASSERT( fabs( ( uC - u ) / u ) < 10e-5 );
+    ASSERT( fabs( ( vC - v ) / v ) < 10e-5 );
+    ASSERT( fabs( ( gC - g ) / g ) < 10e-5 );
+  }
   
   /*
   e = diskload_core( alpha, Compensated, theta, w, diskload_hypergeometric_core, 40000, love, &DefaultEarthModel,
