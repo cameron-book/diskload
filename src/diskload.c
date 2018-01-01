@@ -2,16 +2,44 @@
 #include <gsl/gsl_sf_hyperg.h>
 #include <gsl/gsl_integration.h>
 #include <gsl/gsl_sf_gamma.h>
+#include <gsl/gsl_sf_ellint.h>
 #include <gsl/gsl_monte.h>
+#include <gsl/gsl_deriv.h>
 #include <gsl/gsl_monte_vegas.h>
 #include <string.h>
+#include <gsl/gsl_complex_math.h>
 #include <math.h>
+#include <gsl/gsl_sum.h>
 #include <time.h>
+#include "elliptic-integrals.h"
 #include "diskload.h"
 
 const double Degrees = M_PI / 180.0;
 
 const EarthModel DefaultEarthModel = { 6371.0, 9.8046961 };
+
+gsl_integration_workspace *integration_workspace = NULL;
+gsl_integration_workspace *double_integration_workspace = NULL;
+
+#define LEVIN_U_TERMS 500
+gsl_sum_levin_u_workspace *levin_u_workspace = NULL;
+
+/**
+ * @brief Initialize workspaces for diskload calculations
+ *
+ * @usage This function must be called before other `diskload_`
+ * functions.
+ *
+ **/
+void diskload_initialize(void) {
+  integration_workspace = gsl_integration_workspace_alloc (10000);
+  levin_u_workspace = gsl_sum_levin_u_alloc (LEVIN_U_TERMS);
+
+  double_integration_workspace = gsl_integration_workspace_alloc (10000);
+  
+  return;
+}
+
 
 /*----------------------------------------------------------------*/
 /** @defgroup errors Error handling
@@ -283,10 +311,16 @@ DiskLoadError diskload_truncated(double alpha,DiskLoadType icomp,double theta,do
   double sigma;
   if (icomp == Compensated) sigma = 0.0;
   if (icomp == Uncompensated) sigma = (1-cosalpha)/2.0;
-  
+
+#ifndef DISKLOAD_NO_U  
   *u = LN->h[0] * sigma * p0;
+#endif
+#ifndef DISKLOAD_NO_V  
   *v = 0.0;
+#endif
+#ifndef DISKLOAD_NO_G  
   *g = sigma;
+#endif
   
   // keeping track of low-order bits
   double Uc = 0.0, Vc = 0.0, Gc = 0.0;
@@ -299,28 +333,34 @@ DiskLoadError diskload_truncated(double alpha,DiskLoadType icomp,double theta,do
 
     if (icomp == Compensated) sigma = (pp0 - pp2)/(2*n+1)/(1+cosalpha);
     if (icomp == Uncompensated) sigma = (pp0 - pp2)/(2*n+1)/2.0;
-    
+
+#ifndef DISKLOAD_NO_U      
     // Kahan summation for U
     z = (LN->h[n] * sigma * p1) - Uc;
     t = *u + z;
     Uc = (t - *u) - z;
     *u = t;
+#endif
 
     // Compute the derivative of P_n(cos(x)) with respect to x
     dp1=(-n/sintheta)*(p0 - x*p1);
 
+#ifndef DISKLOAD_NO_V    
     // Kahan summation for V
     z = (LN->l[n] * sigma * dp1) - Vc;
     t = *v + z;
     Vc = (t - *v) - z;
     *v = t;
-        
+#endif
+
+#ifndef DISKLOAD_NO_G    
     // Kahan summation for the geoid term
     z = ((1.0 + LN->k[n]) * sigma * p1) - Gc;
     t = *g + z;
     Vc = (t - *g) - z;
     *g = t;
-
+#endif
+    
     pp0 = pp1;
     pp1 = pp2;
     
@@ -335,10 +375,16 @@ DiskLoadError diskload_truncated(double alpha,DiskLoadType icomp,double theta,do
   double rhoEarth = 3.0*earth->gravity/4.0/newtonsG/M_PI/radiusMeters; // Average Earth density in (kg/m^3)
   double metersToMillimeters = 1000;
   double outputScale = (3*rhoWater/rhoEarth) * w * metersToMillimeters;
-  
+
+#ifndef DISKLOAD_NO_U  
   *u = *u * outputScale;
+#endif
+#ifndef DISKLOAD_NO_V  
   *v = *v * outputScale;
+#endif
+#ifndef DISKLOAD_NO_G  
   *g = *g * outputScale;
+#endif
   
   return 0;
 }
@@ -347,8 +393,8 @@ DiskLoadError diskload_truncated(double alpha,DiskLoadType icomp,double theta,do
  * @brief compute disk load via a computational "core"
  *
  * @usage This function is exactly like diskload_truncated except for
- * the additional parameter `core` which is a pointer to a function
- * which computes the "core" contribution to the infinite sum
+ * the additional parameters `coreG` and `coreH` which point to
+ * functions providing the "core" contribution to the infinite sum
  * computing the disk load.
  *
  * @return a `DiskLoadError` which is E_SUCCESS if successful
@@ -379,8 +425,13 @@ DiskLoadError diskload_core(double alpha,DiskLoadType icomp,double theta,double 
   double pp1 = cosalpha;
   double pp2 = 0.0;
 
-  double coreValue = (*coreG)(cos(alpha * Degrees),cos(theta * Degrees));
+#if !defined(DISKLOAD_NO_U) || !defined(DISKLOAD_NO_G)
+  double coreValue = (*coreG)(alpha * Degrees,theta * Degrees);
+#endif
+  
+#ifndef DISKLOAD_NO_V    
   double coreDerivative = (*coreH)(cos(alpha * Degrees),cos(theta * Degrees));
+#endif
   
   double sigma;
   if (icomp == Compensated) sigma = 0.0;
@@ -390,11 +441,19 @@ DiskLoadError diskload_core(double alpha,DiskLoadType icomp,double theta,double 
   if (icomp == Compensated) coreFactor = 1.0+cosalpha;
   if (icomp == Uncompensated) coreFactor = 2.0;
 
+#ifndef DISKLOAD_NO_U
   *u = LN->h[nmax] * coreValue / coreFactor + (LN->h[0] - LN->h[nmax]) * sigma * p0;
+#endif
+
+#ifndef DISKLOAD_NO_V  
   double l_oo = (nmax + 1) * LN->l[nmax];
   *v = - sintheta * l_oo * coreDerivative / coreFactor;
+#endif
+
+#ifndef DISKLOAD_NO_G
   *g = coreValue / coreFactor;
- 
+#endif
+  
   if (icomp == Compensated) {
     // BADBAD: this differs from the paper -- we should be subtracting the first term?
     *u -= LN->h[nmax] * (1 - cosalpha) / coreFactor;
@@ -411,9 +470,416 @@ DiskLoadError diskload_core(double alpha,DiskLoadType icomp,double theta,double 
     pp2 = ((2*n+1)*cosalpha*pp1 - n*pp0)/(n+1);
 
     sigma = (pp0 - pp2)/(2*n+1)/coreFactor;
-    
+
+#ifndef DISKLOAD_NO_U
     // Kahan summation for U
     z = ((LN->h[n] - LN->h[nmax]) * sigma * p1) - Uc;
+    t = *u + z;
+    Uc = (t - *u) - z;
+    *u = t;
+#endif
+
+    // Compute the derivative of P_n(cos(x)) with respect to x
+    dp1=(-n/sintheta)*(p0 - x*p1);
+
+#ifndef DISKLOAD_NO_V
+    // Kahan summation for V
+    z = ((LN->l[n] - l_oo/(n+1)) * sigma * dp1) - Vc;
+    t = *v + z;
+    Vc = (t - *v) - z;
+    *v = t;
+#endif
+
+#ifndef DISKLOAD_NO_G    
+    // Kahan summation for the geoid term
+    z = (LN->k[n] * sigma * p1) - Gc;
+    t = *g + z;
+    Vc = (t - *g) - z;
+    *g = t;
+#endif
+    
+    pp0 = pp1;
+    pp1 = pp2;
+    
+    // Recursively compute the Legendre polynomial values
+    p2 = ((2*n+1)*x*p1 - n*p0)/(n+1);
+    p0 = p1;
+    p1 = p2;
+  }
+
+  double radiusMeters = earth->radius * 1000;
+  double rhoWater = 1000; // density of pure water(kg/m^3)
+  double rhoEarth = 3.0*earth->gravity/4.0/newtonsG/M_PI/radiusMeters; // Average Earth density in (kg/m^3)
+  double metersToMillimeters = 1000;
+  double outputScale = (3*rhoWater/rhoEarth) * w * metersToMillimeters;
+
+#ifndef DISKLOAD_NO_U  
+  *u = *u * outputScale;
+#endif
+#ifndef DISKLOAD_NO_V
+  *v = *v * outputScale;
+#endif
+#ifndef DISKLOAD_NO_G
+  *g = *g * outputScale;
+#endif
+  
+  return 0;
+}
+
+double hyperg_z_GT1 (double a, double b, double c, double z) {
+  double coef1,coef2;
+  
+  coef1=gsl_sf_gamma(c)*gsl_sf_gamma(b-a)*pow(1-z,-a)/(gsl_sf_gamma(b)*gsl_sf_gamma(c-a));
+  coef2=gsl_sf_gamma(c)*gsl_sf_gamma(a-b)*pow(1-z,-b)/(gsl_sf_gamma(a)*gsl_sf_gamma(c-b));
+  double result = coef1*gsl_sf_hyperg_2F1(a,c-b,a-b+1,1/(1-z))+coef2*gsl_sf_hyperg_2F1(b,c-a,b-a+1,1/(1-z));
+
+  return result;
+}
+
+double f_hypergeometric (double t, void *params)
+{
+  double y = *(double *) params;
+  double z = (1-t*t)*(1-y*y)/((1-t*y)*(1-t*y));
+
+  // BADBAD: this is broken
+  /*
+  if (fabs(z - 1.0) < 1e-10)
+    z = 1.0 - 1e-10;
+  */
+
+  if ((z >= 1.0) && (z < 1.0 + 1e-10))
+    z = 1.0 + 1e-10;
+
+  if ((z < 1.0) && (z > 1.0 - 1e-10))
+    z = 1.0 - 1e-10;  
+    
+  
+  if ((z < -1) || (z > 1))
+    return hyperg_z_GT1(0.25, 0.75, 1.0, z)/sqrt(2-2*t*y);
+  else
+    return gsl_sf_hyperg_2F1(0.25, 0.75, 1.0, z)/sqrt(2-2*t*y);
+}
+
+double f_elliptic (double t, void *params) {
+  double y = *(double *) params;    
+  double z = 0.5*(1 - fabs((t*y-1)/(t-y)));
+  double factor = 2.0;
+  
+  if (z < 0) {
+    factor *= sqrt(-1.0/(z-1.0));
+    z = z/(z-1);
+  }
+
+  if (z > 1) {
+    factor /= sqrt(z);
+    z = 1.0/z;
+  }
+
+  return factor*gsl_sf_ellint_Kcomp( sqrt(z), GSL_PREC_DOUBLE ) / M_PI / sqrt(2.0*fabs(y-t));
+}
+
+double diskload_core_terms[LEVIN_U_TERMS];
+
+double diskload_core_H_truncated(double x,double y) {
+  int nmax = 120000;
+  double result = 0.0;
+  int n;
+
+  double p0 = 1.0;
+  double p1 = x;
+  double p2 = (3.0*x*x - 1.0)/2;
+
+  double pp0 = 1.0;
+  double pp1 = y;
+  double pp2 = 0.0;
+
+  double q1;
+
+  result = 0.0;
+
+  // This looks like an off-by-one error, but the first term is
+  // actually 0, and we don't include it in the accelerated series
+  for( n=1; n <= nmax; n++ ) {
+    p2 = ((2*n+1)*x*p1 - n*p0)/(n+1);    
+    q1 = (p0 - p2)/(2*n+1);
+
+    double dp1 = (y*pp1 - pp0) * n / (y*y - 1);
+
+    result += q1 * dp1 / (n+1);
+
+    p0 = p1;
+    p1 = p2;
+    
+    pp2 = ((2*n+1)*y*pp1 - n*pp0)/(n+1);
+    pp0 = pp1;
+    pp1 = pp2;
+  }
+  
+  return result;
+}
+
+
+double diskload_core_H_truncated_poorly(double x,double y) {
+  //int nmax = LEVIN_U_TERMS;
+  int nmax = 80000;
+  double result = 0.0;
+  int n;
+
+  double p0 = 1.0;
+  double p1 = x;
+  double p2 = (3.0*x*x - 1.0)/2;
+
+  double pp0 = 1.0;
+  double pp1 = y;
+  double pp2 = 0.0;
+
+  double q1;
+
+  result = 0.0;
+
+  double largest = -1e300;
+  double smallest = 1e300;  
+  double cesaro = 0.0;
+  
+  // This looks like an off-by-one error, but the first term is
+  // actually 0, and we don't include it in the accelerated series
+  for( n=1; n <= nmax; n++ ) {
+    p2 = ((2*n+1)*x*p1 - n*p0)/(n+1);    
+    q1 = (p0 - p2)/(2*n+1);
+
+    double dp1 = (y*pp1 - pp0) * n / (y*y - 1);
+
+    //diskload_core_terms[n-1] = q1 * (y*pp1 - pp0) / (y*y - 1) * ((double)n / (n+1));
+    
+    //cesaro += ((double)nmax/(n+1) - 1) * q1 * dp1;
+    result += q1 * dp1 / (n+1);
+    cesaro += result;
+    if (n > 1000) {
+      if (result > largest)
+        largest = result;
+      if (result < smallest)
+        smallest = result;
+    }
+
+    p0 = p1;
+    p1 = p2;
+    
+    pp2 = ((2*n+1)*y*pp1 - n*pp0)/(n+1);
+    pp0 = pp1;
+    pp1 = pp2;
+  }
+
+  double sum_accel, err;
+  //  gsl_sum_levin_u_accel (diskload_core_terms, nmax, levin_u_workspace,
+  //&sum_accel, &err );
+
+  printf( "result = %e\n", result );
+  printf( "cesaro = %e\n", cesaro / nmax );  
+  printf( "large  = %e\n", largest );
+  printf( "small  = %e\n", smallest );
+  printf( "average  = %e\n", (largest + smallest)/2.0 );
+  printf( "geom  = %e\n", sqrt(largest * smallest) );
+  //printf( "other  = %e\n", levin_u_workspace->sum_plain );
+  //printf( "sumacc = %e\n", sum_accel );
+  //printf( "error  = %e\n", err );
+  printf( "truth  = %e\n", diskload_core_H_truncated(x,y) );
+  
+  return result / nmax;
+}
+
+double diskload_hypergeometric_core_G(double x,double y) {
+  x = cos(x);
+  y = cos(y);
+  
+  double lower_limit = x;	/* lower limit a */
+  double upper_limit = 1;	/* upper limit b */
+  double abs_error = 1.0e-6;	/* to avoid round-off problems */
+  double rel_error = 1.0e-6;	/* the result will usually be much better */
+  double result;		/* the result from the integration */
+  double error;			/* the estimated error from the integration */
+  
+  gsl_function My_function;
+  void *params_ptr = &y;
+  My_function.function = &f_elliptic;
+  My_function.params = params_ptr;
+  
+  double pts[3];
+  int npts;
+
+  if ((y > x) && (y < 1)) {
+    pts[0] = lower_limit;
+    pts[1] = y;
+    pts[2] = upper_limit;
+    npts = 3;
+  } else {
+    pts[0] = lower_limit;
+    pts[1] = upper_limit;
+    npts = 2;    
+  }
+
+  gsl_integration_qagp (&My_function, pts, npts,
+			abs_error, rel_error, 1000,
+                        integration_workspace, &result,
+			&error);
+
+  return result;
+}
+
+// this is G(cos(x),cos(y))? 
+double diskload_core_G(double x, double y) {
+  const gsl_mode_t mode = GSL_PREC_DOUBLE;
+
+  //printf( "y=%e\n", y );
+  //printf( "x=%e\n", x );    
+  
+  x = x/2;
+  y = y/2;  
+  
+  double factor2 = (cos(2*x) - cos(2*y)) / M_PI / cos(x) / sin(y);
+
+  double factor = (cos(x)/sin(y) + 
+                   sin(y)/cos(x) - (cos(y)/tan(y)/cos(x) + sin(x)*tan(x)/sin(y)))/M_PI;
+  double k = tan(x)/tan(y);
+  gsl_complex u = gsl_complex_arcsin_real(tan(y)/tan(x));
+  //double phi = GSL_REAL(u);
+      
+  double n = (sin(x)/sin(y))*(sin(x)/sin(y));
+
+  // perhaps these differences mean that when k is small
+  // we don't need to be "extended" and when k is big, we can
+  /*
+  printf( "tan(y)=%f\n", tan(y) );
+  printf( "tan(x)=%f\n", tan(x) );
+  printf( "factor=%e\n", factor );
+  printf( "tan(y)/tan(x)=%f\n", tan(y)/tan(x) );  
+  printf( "phi=%f\n", phi );
+  printf( "k=%f\n", k );
+  printf( "n=%f\n", n );    
+  */
+  // BADBAD: Check this
+  /*
+  if (fabs(k-1.0) < 1e-6)
+    return 1;
+  */
+  
+  // possibly need to negate the N in these
+  double complete = gsl_sf_ellint_Kcomp_extended(k,mode) -
+                    gsl_sf_ellint_Pcomp_extended(k,-n,mode);
+  /*
+  printf( "K = %e\n", gsl_sf_ellint_Kcomp_extended(k,mode) );
+  printf( "elliptic_kc(%f)\n", k*k );
+  printf( "Pi(k,n) = %e\n", gsl_sf_ellint_Pcomp_extended(k,-n,mode) );  
+  printf( "elliptic_pi(%f,pi/2,%f)\n", n, k*k );
+  
+  printf( "complete = %e\n", complete );
+  */
+  /*
+  gg[x_,y_] := (-EllipticF[ArcSin[Sqrt[Cot[x/2]^2*Tan[y/2]^2]], Cot[y/2]^2*Tan[x/2]^2] - 
+    EllipticK[Cot[y/2]^2*Tan[x/2]^2] + EllipticPi[(-1 + Cos[x])/(-1 + Cos[y]), Cot[y/2]^2*Tan[x/2]^2] + 
+                                                                              EllipticPi[(-1 + Cos[x])/(-1 + Cos[y]), ArcSin[Sqrt[Cot[x/2]^2*Tan[y/2]^2]], Cot[y/2]^2*Tan[x/2]^2])
+  gg[x_,y_] := (EllipticF[ArcSin[Cot[x/2]*Tan[y/2]], Cot[y/2]^2*Tan[x/2]^2] + EllipticK[Cot[y/2]^2*Tan[x/2]^2] - 
+    EllipticPi[(-1 + Cos[x])/(-1 + Cos[y]), Cot[y/2]^2*Tan[x/2]^2] - EllipticPi[(-1 + Cos[x])/(-1 + Cos[y]), ArcSin[Cot[x/2]*Tan[y/2]], 
+                                                                                Cot[y/2]^2*Tan[x/2]^2])
+  */
+  
+  // use EllipticPi[n, ArcCsc[Sqrt[m]], m] == (1/Sqrt[m]) EllipticPi[n/m, 1/m]
+
+  /*
+      double incomplete = GSL_REAL(gsl_sf_ellint_Fz(u,k,mode)) -
+      GSL_REAL(gsl_sf_ellint_Pz(u,k,n,mode));
+   */
+  
+  double incomplete = GSL_REAL(gsl_sf_ellint_Fz(u,k,mode));
+  incomplete -= gsl_sf_ellint_Pcomp_extended(1/k,-n/k/k,mode) / k;
+  /*
+  printf( "incomplete Pi = %e\n", gsl_sf_ellint_Pcomp_extended(1/k,-n/k/k,mode) / k );
+  printf( "EllipticPi[%f,ArcSin[%f],%f]\n", n, 1/k, k*k );
+
+  printf( "F = %e\n", GSL_REAL(gsl_sf_ellint_Fz(u,k,mode)) );
+  
+  printf( "incomplete=%f\n", incomplete );
+
+  printf( "Elliptic = %e\n", complete + incomplete );
+  */
+  double result = 1.0 - factor*(incomplete + complete);
+
+  //printf( "result = %f\n", result );
+  
+  return result;
+}
+
+/**
+ * @brief compute disk load via integrals of hypergeometric functions
+ *
+ * @usage This function is numerically akin to diskload_truncated, but
+ * uses a rather different algorithm internally.
+ *
+ * @return a `DiskLoadError` which is E_SUCCESS if successful
+ ****************************************************************************************/
+DiskLoadError diskload_hypergeometric(double alpha,DiskLoadType icomp,double theta,double w,int nmax,LoveNumbers* LN,const EarthModel* earth, double *u, double *v, double *g) {
+  return diskload_core(alpha,icomp,theta,w,diskload_core_G, diskload_core_H, nmax,LN,earth,u,v,g);
+}
+
+/**
+ * @brief compute point load 
+ *
+ * @usage This function is numerically akin to diskload_truncated, but
+ * uses a rather different algorithm internally.
+ *
+ * @return a `DiskLoadError` which is E_SUCCESS if successful
+ ****************************************************************************************/
+DiskLoadError diskload_point(double theta,double w,int nmax,LoveNumbers* LN,const EarthModel* earth, double *u, double *v, double *g) {
+  if (earth == NULL) earth = &DefaultEarthModel;
+
+  // The 2014 CODATA-recommended value of the gravitational constant in SI units
+  double newtonsG =6.6740831e-11;
+
+  if (nmax > LN->degrees) {
+    RETURN_ERROR(E_LOVE_NUMBER_VECTOR_TOO_SHORT);
+  }
+  
+  if ((LN->l[0] != 0) || (LN->k[0] != 0)) {
+    RETURN_ERROR(E_LOVE_NUMBER_L0_AND_K0_ARE_NONZERO);
+  }
+  
+  double alpha = 0.0;
+  double x = cos(theta * Degrees);
+  double sintheta = sin(theta * Degrees);  
+  double cosalpha = 1.0;
+
+  double p0 = 1.0;
+  double p1 = x;
+ 
+  double pp0 = 1.0;
+  double pp1 = cosalpha;
+  double pp2 = 0.0;
+
+  double coreValue = 1.0 / (2*sin(theta*Degrees/2.0));
+  //double coreDerivative = (*coreH)(cos(alpha * Degrees),cos(theta * Degrees));
+  double coreDerivative = 17.0;
+  
+  double sigma = 0.0;
+  double coreFactor = 2.0;
+
+  *u = (LN->h[nmax] / (2.0*sin(theta*Degrees/2.0)) + (LN->h[0] - LN->h[nmax]) * p0)/coreFactor;
+  double l_oo = (nmax + 1) * LN->l[nmax];
+  *v = - sintheta * l_oo * coreDerivative / coreFactor;
+  *g = coreValue / coreFactor;
+   
+  // keeping track of low-order bits
+  double Uc = 0.0, Vc = 0.0, Gc = 0.0;
+  
+  double dp1, q1, p2, input, t, z;
+
+  for( int n = 1; n <= nmax; n++ ) {
+    // Recursively compute the loading factor
+    pp2 = ((2*n+1)*cosalpha*pp1 - n*pp0)/(n+1);
+    //printf( "%g\n", pp2 );
+
+    sigma = (pp0 - pp2)/(2*n+1)/coreFactor;
+    
+    // Kahan summation for U
+    z = ((LN->h[n] - LN->h[nmax]) * p1 / coreFactor) - Uc;
     t = *u + z;
     Uc = (t - *u) - z;
     *u = t;
@@ -447,88 +913,79 @@ DiskLoadError diskload_core(double alpha,DiskLoadType icomp,double theta,double 
   double rhoEarth = 3.0*earth->gravity/4.0/newtonsG/M_PI/radiusMeters; // Average Earth density in (kg/m^3)
   double metersToMillimeters = 1000;
   double outputScale = (3*rhoWater/rhoEarth) * w * metersToMillimeters;
-  
+
   *u = *u * outputScale;
   *v = *v * outputScale;
   *g = *g * outputScale;
   
   return 0;
-}
+}  
+ 
 
-double hyperg_z_GT1 (double a, double b, double c, double z) {
-  double coef1,coef2;
-  coef1=gsl_sf_gamma(c)*gsl_sf_gamma(b-a)*pow(1-z,-a)/(gsl_sf_gamma(b)*gsl_sf_gamma(c-a));
-  coef2=gsl_sf_gamma(c)*gsl_sf_gamma(a-b)*pow(1-z,-b)/(gsl_sf_gamma(a)*gsl_sf_gamma(c-b));
-  double result = coef1*gsl_sf_hyperg_2F1(a,c-b,a-b+1,1/(1-z))+coef2*gsl_sf_hyperg_2F1(b,c-a,b-a+1,1/(1-z));
 
-  return result;
-}
+/** @} */ // end of computations
 
-double f (double t, void *params)
-{
-  double y = *(double *) params;
-  double z = (1-t*t)*(1-y*y)/((1-t*y)*(1-t*y));
+double F(double x,double y,double z) {
+  double d = 1 - 2*x*y*z + z*z;
+  double w = 4.0*(1-x*x)*(1-y*y)*z*z / (d*d);
 
-  // BADBAD: this is broken
-  if (fabs(z - 1.0) < 1e-10)
-    z = 1.0 - 1e-10;
+  if ((w >= 1.0) && (w < 1.0 + 1e-10))
+    w = 1.0 + 1e-10;
+
+  if ((w < 1.0) && (w > 1.0 - 1e-10))
+    w = 1.0 - 1e-10;    
   
-  if ((z < -1) || (z > 1))
-    return hyperg_z_GT1(0.25, 0.75, 1.0, z)/sqrt(2-2*t*y);
+  if ((w < -1) || (w > 1))
+    return hyperg_z_GT1(0.25, 0.75, 1.0, w)/sqrt(d);
   else
-    return gsl_sf_hyperg_2F1(0.25, 0.75, 1.0, z)/sqrt(2-2*t*y);
+    return gsl_sf_hyperg_2F1(0.25, 0.75, 1.0, w)/sqrt(d);
 }
 
-double diskload_core_H(double x,double y) {
-  int nmax = 40000;
-  double result = 0.0;
-  int n;
-
-  double p0 = 1.0;
-  double p1 = x;
-  double p2 = (3.0*x*x - 1.0)/2;
-
-  double pp0 = 1.0;
-  double pp1 = y;
-  double pp2 = 0.0;
-
-  double q1;
-
-  result = 0.0;
-  
-  for( n=1; n <= nmax; n++ ) {
-    p2 = ((2*n+1)*x*p1 - n*p0)/(n+1);    
-    q1 = (p0 - p2)/(2*n+1);
-
-    double dp1 = (y*pp1 - pp0) * n / (y*y - 1);
-
-    result += q1 * dp1 / (n+1);
-
-    p0 = p1;
-    p1 = p2;
-    
-    pp2 = ((2*n+1)*y*pp1 - n*pp0)/(n+1);
-    pp0 = pp1;
-    pp1 = pp2;
-  }
+double FF(double t, void *params) {
+  double x = ((double *) params)[0];
+  double y = ((double *) params)[1];  
+  double z = t;
+  double result = F(x,y,z);
+  //printf( "(%f,%f,%f) = %f\n", x, y, z, result );
   return result;
 }
 
-double diskload_hypergeometric_core_G(double x,double y) {
-  gsl_integration_workspace *work_ptr = gsl_integration_workspace_alloc (10000);
+double int_f_dz (double t, void *params) {
+  double y = *(double *) params;    
 
-  double lower_limit = x;	/* lower limit a */
+  double lower_limit = 0;	/* lower limit a */
   double upper_limit = 1;	/* upper limit b */
-  double abs_error = 1.0e-6;	/* to avoid round-off problems */
-  double rel_error = 1.0e-6;	/* the result will usually be much better */
+  double abs_error = 1.0e-4;	/* to avoid round-off problems */
+  double rel_error = 1.0e-4;	/* the result will usually be much better */
   double result;		/* the result from the integration */
   double error;			/* the estimated error from the integration */
 
-  double expected = -4.0;	// exact answer
+  gsl_function My_function;
+  double params_array[2] = { t, y };
+  void *params_ptr = params_array;
+  My_function.function = &FF;
+  My_function.params = params_ptr;
+  
+  gsl_integration_qag (&My_function, lower_limit, upper_limit,
+                       abs_error, rel_error, 1000, GSL_INTEG_GAUSS61,
+                       double_integration_workspace, &result,
+                       &error);
+  return result; 
+}
+
+double H(double y, void *params) {
+  double x = ((double *) params)[0];
+  
+  double lower_limit = x;	/* lower limit a */
+  double upper_limit = 1;	/* upper limit b */
+  double abs_error = 1.0e-4;	/* to avoid round-off problems */
+  double rel_error = 1.0e-4;	/* the result will usually be much better */
+  double result;		/* the result from the integration */
+  double error;			/* the estimated error from the integration */
 
   gsl_function My_function;
   void *params_ptr = &y;
-  My_function.function = &f;
+  My_function.function = &int_f_dz;
   My_function.params = params_ptr;
   
   double pts[3];
@@ -546,23 +1003,23 @@ double diskload_hypergeometric_core_G(double x,double y) {
   }
 
   gsl_integration_qagp (&My_function, pts, npts,
-			abs_error, rel_error, 1000, work_ptr, &result,
+			abs_error, rel_error, 1000,
+                        integration_workspace, &result,
 			&error);
 
+  return result; 
+}
+
+double diskload_core_H(double x, double y) {
+  gsl_function F;
+  
+  double result, abserr;
+  F.function = &H;
+  void *params_ptr = &x;  
+  F.params = params_ptr;
+
+  gsl_deriv_backward (&F, y, 1e-8, &result, &abserr);
+  
   return result;
+
 }
-
-/**
- * @brief compute disk load via integrals of hypergeometric functions
- *
- * @usage This function is numerically akin to diskload_truncated, but
- * uses a rather different algorithm internally.
- *
- * @return a `DiskLoadError` which is E_SUCCESS if successful
- ****************************************************************************************/
-DiskLoadError diskload_hypergeometric(double alpha,DiskLoadType icomp,double theta,double w,int nmax,LoveNumbers* LN,const EarthModel* earth, double *u, double *v, double *g) {
-  return diskload_core(alpha,icomp,theta,w,diskload_hypergeometric_core_G, diskload_core_H, nmax,LN,earth,u,v,g);
-}
-
-
-/** @} */ // end of computations
