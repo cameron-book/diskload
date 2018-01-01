@@ -13,6 +13,7 @@
 #include <time.h>
 #include "elliptic-integrals.h"
 #include "diskload.h"
+#include "tanhsinh.h"
 
 const double Degrees = M_PI / 180.0;
 
@@ -430,7 +431,7 @@ DiskLoadError diskload_core(double alpha,DiskLoadType icomp,double theta,double 
 #endif
   
 #ifndef DISKLOAD_NO_V    
-  double coreDerivative = (*coreH)(cos(alpha * Degrees),cos(theta * Degrees));
+  double coreDerivative = (*coreH)(alpha * Degrees,theta * Degrees);
 #endif
   
   double sigma;
@@ -446,7 +447,7 @@ DiskLoadError diskload_core(double alpha,DiskLoadType icomp,double theta,double 
 #endif
 
 #ifndef DISKLOAD_NO_V  
-  double l_oo = (nmax + 1) * LN->l[nmax];
+  double l_oo = (nmax) * LN->l[nmax];
   *v = - sintheta * l_oo * coreDerivative / coreFactor;
 #endif
 
@@ -484,7 +485,8 @@ DiskLoadError diskload_core(double alpha,DiskLoadType icomp,double theta,double 
 
 #ifndef DISKLOAD_NO_V
     // Kahan summation for V
-    z = ((LN->l[n] - l_oo/(n+1)) * sigma * dp1) - Vc;
+    // this is /n and not /(n+1)
+    z = ((LN->l[n] - l_oo/n) * sigma * dp1) - Vc;
     t = *v + z;
     Vc = (t - *v) - z;
     *v = t;
@@ -581,6 +583,9 @@ double f_elliptic (double t, void *params) {
 double diskload_core_terms[LEVIN_U_TERMS];
 
 double diskload_core_H_truncated(double x,double y) {
+  x = cos(x);
+  y = cos(y);
+  
   int nmax = 120000;
   double result = 0.0;
   int n;
@@ -605,7 +610,7 @@ double diskload_core_H_truncated(double x,double y) {
 
     double dp1 = (y*pp1 - pp0) * n / (y*y - 1);
 
-    result += q1 * dp1 / (n+1);
+    result += q1 * dp1 / (n);
 
     p0 = p1;
     p1 = p2;
@@ -725,87 +730,24 @@ double diskload_hypergeometric_core_G(double x,double y) {
   return result;
 }
 
-// this is G(cos(x),cos(y))? 
 double diskload_core_G(double x, double y) {
   const gsl_mode_t mode = GSL_PREC_DOUBLE;
-
-  //printf( "y=%e\n", y );
-  //printf( "x=%e\n", x );    
   
   x = x/2;
   y = y/2;  
   
-  double factor2 = (cos(2*x) - cos(2*y)) / M_PI / cos(x) / sin(y);
-
-  double factor = (cos(x)/sin(y) + 
-                   sin(y)/cos(x) - (cos(y)/tan(y)/cos(x) + sin(x)*tan(x)/sin(y)))/M_PI;
+  double factor = (cos(x)/sin(y) + sin(y)/cos(x) - (cos(y)/tan(y)/cos(x) + sin(x)*tan(x)/sin(y)))/M_PI;
   double k = tan(x)/tan(y);
   gsl_complex u = gsl_complex_arcsin_real(tan(y)/tan(x));
-  //double phi = GSL_REAL(u);
-      
   double n = (sin(x)/sin(y))*(sin(x)/sin(y));
 
-  // perhaps these differences mean that when k is small
-  // we don't need to be "extended" and when k is big, we can
-  /*
-  printf( "tan(y)=%f\n", tan(y) );
-  printf( "tan(x)=%f\n", tan(x) );
-  printf( "factor=%e\n", factor );
-  printf( "tan(y)/tan(x)=%f\n", tan(y)/tan(x) );  
-  printf( "phi=%f\n", phi );
-  printf( "k=%f\n", k );
-  printf( "n=%f\n", n );    
-  */
-  // BADBAD: Check this
-  /*
-  if (fabs(k-1.0) < 1e-6)
-    return 1;
-  */
-  
-  // possibly need to negate the N in these
   double complete = gsl_sf_ellint_Kcomp_extended(k,mode) -
                     gsl_sf_ellint_Pcomp_extended(k,-n,mode);
-  /*
-  printf( "K = %e\n", gsl_sf_ellint_Kcomp_extended(k,mode) );
-  printf( "elliptic_kc(%f)\n", k*k );
-  printf( "Pi(k,n) = %e\n", gsl_sf_ellint_Pcomp_extended(k,-n,mode) );  
-  printf( "elliptic_pi(%f,pi/2,%f)\n", n, k*k );
-  
-  printf( "complete = %e\n", complete );
-  */
-  /*
-  gg[x_,y_] := (-EllipticF[ArcSin[Sqrt[Cot[x/2]^2*Tan[y/2]^2]], Cot[y/2]^2*Tan[x/2]^2] - 
-    EllipticK[Cot[y/2]^2*Tan[x/2]^2] + EllipticPi[(-1 + Cos[x])/(-1 + Cos[y]), Cot[y/2]^2*Tan[x/2]^2] + 
-                                                                              EllipticPi[(-1 + Cos[x])/(-1 + Cos[y]), ArcSin[Sqrt[Cot[x/2]^2*Tan[y/2]^2]], Cot[y/2]^2*Tan[x/2]^2])
-  gg[x_,y_] := (EllipticF[ArcSin[Cot[x/2]*Tan[y/2]], Cot[y/2]^2*Tan[x/2]^2] + EllipticK[Cot[y/2]^2*Tan[x/2]^2] - 
-    EllipticPi[(-1 + Cos[x])/(-1 + Cos[y]), Cot[y/2]^2*Tan[x/2]^2] - EllipticPi[(-1 + Cos[x])/(-1 + Cos[y]), ArcSin[Cot[x/2]*Tan[y/2]], 
-                                                                                Cot[y/2]^2*Tan[x/2]^2])
-  */
-  
-  // use EllipticPi[n, ArcCsc[Sqrt[m]], m] == (1/Sqrt[m]) EllipticPi[n/m, 1/m]
 
-  /*
-      double incomplete = GSL_REAL(gsl_sf_ellint_Fz(u,k,mode)) -
-      GSL_REAL(gsl_sf_ellint_Pz(u,k,n,mode));
-   */
-  
-  double incomplete = GSL_REAL(gsl_sf_ellint_Fz(u,k,mode));
-  incomplete -= gsl_sf_ellint_Pcomp_extended(1/k,-n/k/k,mode) / k;
-  /*
-  printf( "incomplete Pi = %e\n", gsl_sf_ellint_Pcomp_extended(1/k,-n/k/k,mode) / k );
-  printf( "EllipticPi[%f,ArcSin[%f],%f]\n", n, 1/k, k*k );
+  double incomplete = GSL_REAL(gsl_sf_ellint_Fz(u,k,mode)) -
+                      gsl_sf_ellint_Pcomp_extended(1/k,-n/k/k,mode) / k;
 
-  printf( "F = %e\n", GSL_REAL(gsl_sf_ellint_Fz(u,k,mode)) );
-  
-  printf( "incomplete=%f\n", incomplete );
-
-  printf( "Elliptic = %e\n", complete + incomplete );
-  */
-  double result = 1.0 - factor*(incomplete + complete);
-
-  //printf( "result = %f\n", result );
-  
-  return result;
+  return 1.0 - factor*(incomplete + complete);
 }
 
 /**
@@ -817,7 +759,7 @@ double diskload_core_G(double x, double y) {
  * @return a `DiskLoadError` which is E_SUCCESS if successful
  ****************************************************************************************/
 DiskLoadError diskload_hypergeometric(double alpha,DiskLoadType icomp,double theta,double w,int nmax,LoveNumbers* LN,const EarthModel* earth, double *u, double *v, double *g) {
-  return diskload_core(alpha,icomp,theta,w,diskload_core_G, diskload_core_H, nmax,LN,earth,u,v,g);
+  return diskload_core(alpha,icomp,theta,w,diskload_core_G, diskload_core_H_truncated, nmax,LN,earth,u,v,g);
 }
 
 /**
@@ -855,8 +797,8 @@ DiskLoadError diskload_point(double theta,double w,int nmax,LoveNumbers* LN,cons
   double pp2 = 0.0;
 
   double coreValue = 1.0 / (2*sin(theta*Degrees/2.0));
-  //double coreDerivative = (*coreH)(cos(alpha * Degrees),cos(theta * Degrees));
-  double coreDerivative = 17.0;
+  //double coreDerivative = (*coreH)(alpha * Degrees,theta * Degrees);
+  double coreDerivative = 17;
   
   double sigma = 0.0;
   double coreFactor = 2.0;
@@ -1010,7 +952,7 @@ double H(double y, void *params) {
   return result; 
 }
 
-double diskload_core_H(double x, double y) {
+double diskload_core_H_bad(double x, double y) {
   gsl_function F;
   
   double result, abserr;
@@ -1023,3 +965,64 @@ double diskload_core_H(double x, double y) {
   return result;
 
 }
+
+double integrand (double t, const void *params) {
+  double x = ((double*)params)[0];
+  double y = ((double*)params)[1];
+  
+  /*
+    Effectively this is:
+    
+  if ((x < t) && (y < t)) 
+    return t*sqrt((-x + t)/(-y + t))/sqrt(1-t*t);
+  
+  if ((x > t) && (y > t)) 
+    return -t*sqrt((-x + t)/(-y + t))/sqrt(1-t*t);
+
+  return -sqrt(-(-x + t)/(-y + t));
+  */
+
+  double sign = 1.0;
+  if (signbit(t)) sign = -1.0;
+  if ((x > t) && (y > t))
+    sign = -sign;
+  
+  if (((x < t) && (y < t)) || ((x > t) && (y > t)))
+    return sign*sqrt(t*t*(-x + t)/(-y + t)/(1-t*t));
+
+  return -sqrt(-(-x + t)/(-y + t));
+
+}
+
+// https://github.com/Rufflewind/tanhsinh
+
+double diskload_core_M(double x, double y) {
+  x = cos(x);
+  y = cos(y);
+  
+  double abs_error = 1.0e-8;	/* to avoid round-off problems */  
+  double params[2] = {x,y};
+
+  double result = 0.0;
+  result += tanhsinh_quad(integrand, params,
+                          -1 + DBL_EPSILON, fmin(x,y) - DBL_EPSILON, abs_error,
+                          NULL, NULL);
+  result += tanhsinh_quad(integrand, params,
+                          fmin(x,y) + DBL_EPSILON, fmax(x,y) - DBL_EPSILON, abs_error,
+                          NULL, NULL);
+  result += tanhsinh_quad(integrand, params,
+                          fmax(x,y) + DBL_EPSILON, 1.0 - DBL_EPSILON, abs_error,
+                          NULL, NULL);
+  return result / M_PI;
+}
+
+double diskload_core_H(double x, double y) {
+  double G = diskload_core_G(x,y);
+  double M = diskload_core_M(x,y);
+  
+  x = cos(x);
+  y = cos(y);
+  
+  return ((G - (1-x)) * y  - M) / (y*y - 1);
+}
+

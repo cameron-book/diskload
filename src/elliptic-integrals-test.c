@@ -18,7 +18,8 @@
 #define SECTION(x) printf( BLUE "\n   %s\n\n" RESET, x );
 
 #define EPSILON 1e-8
-#define EQUALS(x,y) (printf("%f\n",x),fabs(x-y) < EPSILON)
+//#define EQUALS(x,y) (printf("%f\n",x),fabs(x-y) < EPSILON)
+#define EQUALS(x,y) (fabs(x-y) < EPSILON)
 
 int main( void ) {
   const gsl_mode_t mode = GSL_PREC_DOUBLE;
@@ -79,34 +80,6 @@ int main( void ) {
 
   ASSERT( EQUALS(gsl_sf_ellint_Pcomp_extended( 2.0, -1.00754, mode ), -9.517077071840008254392703704619 ) );
 
-  printf( "PI(1.5,3) = %16g\n", gsl_sf_ellint_Pcomp_extended( 3.0, -1.5, mode ) );
-     
-  // EllipticPi[n, m] + Pi/(2*(Sqrt[1 - n] Sqrt[1 - m/n]))
-    
-  SECTION( "Verify that Π(phi,k,n) is defined when k < 1 and n < 1." );  
-
-  ASSERT( EQUALS(gsl_sf_ellint_P_extended( 0.1, 0.8, 0.7, mode ),  0.09987441865761957402634453891 ) );
-  ASSERT( EQUALS(gsl_sf_ellint_P_extended( 0.3, 0.4, 0.5, mode ),  0.29638664922107261862938057 ) );
-
-  SECTION( "Verify that Π(phi,k,n) is defined when k < 1 and n > 1." );  
-
-  ASSERT( EQUALS(gsl_sf_ellint_P_extended( 0.7, 0.3, 17, mode ), 0.306985223407464833929782028359 ) );
-  ASSERT( EQUALS(gsl_sf_ellint_P_extended( 0.9, 0.8, 3.1, mode ), 0.6301220244348044574176179879676574 ) );
-  
-  SECTION( "Verify that Π(phi,k,n) is defined when k > 1 and n < 1 but k*sin(phi) < 1." );  
-
-  ASSERT( EQUALS(gsl_sf_ellint_P_extended( 0.3, 1.4, 0.5, mode ),   0.3048601305161044717334649067264 ) );
-  ASSERT( EQUALS(gsl_sf_ellint_P_extended( 0.6, 1.7, 0.8, mode ),  0.7392210345505877009817817259138452 ) );
-
-  SECTION( "Verify that Π(phi,k,n) is defined when k > 1 and n > 1 but k*sin(phi) < 1." );  
-
-  ASSERT( EQUALS(gsl_sf_ellint_P_extended( 0.2, 1.2, 1.1, mode ),  0.199069226408281338705911402167020 ) );
-  ASSERT( EQUALS(gsl_sf_ellint_P_extended( 0.1, 1.3, 1.2, mode ), 0.099884879158865242348543389218933423 ) );
-
-  gsl_complex w = gsl_sf_ellint_RJ_z(-1.2,2.3,3.4,1.5, mode );
-  printf( "%e + %e I\n", GSL_REAL(w)-0.39221392183173276, GSL_IMAG(w)+0.41968018391230205 );
-
-  
   printf( CYAN "\n   %d tests; %d passed.\n\n" RESET, tests, successes );  
   
   return 0;

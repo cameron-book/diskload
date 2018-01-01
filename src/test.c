@@ -18,6 +18,8 @@
 #define SECTION(x) printf( BLUE "\n   %s\n\n" RESET, x );
 
 int main( void ) {
+  diskload_initialize();
+  
   LoveNumbers* love = diskload_read_love_numbers("../REF_6371_loading_love_numbers_0_40000.txt");
   int tests = 0;
   int successes = 0;
@@ -48,7 +50,7 @@ int main( void ) {
                      &u, &v, &g );
   ASSERT (e == E_SUCCESS);
 
-  const double epsilon = 10e-10;
+  const double epsilon = 1e-9;
 
   SECTION( "Verify that we're close to the values from the MATLAB code" );
   ASSERT( fabs( ( -2.0449592462e+00 - u ) / u ) < epsilon );
@@ -91,9 +93,9 @@ int main( void ) {
   e = diskload_hypergeometric( alpha, Uncompensated, theta, w, 40000, love, &DefaultEarthModel,
                                         &u, &v, &g );
   ASSERT( e == E_SUCCESS );
-  ASSERT( fabs( ( uU - u ) / u ) < 10e-7 );
-  ASSERT( fabs( ( vU - v ) / v ) < 10e-7 );  
-  ASSERT( fabs( ( gU - g ) / g ) < 10e-7 );
+  ASSERT( fabs( ( uU - u ) / u ) < 1e-6 );
+  ASSERT( fabs( ( vU - v ) / v ) < 1e-5 );  
+  ASSERT( fabs( ( gU - g ) / g ) < 1e-6 );
 
   printf( "%e %e %e\n", uU, vU, gU );
   printf( "%e %e %e\n", u, v, g );
@@ -116,17 +118,27 @@ int main( void ) {
     
     e = diskload_hypergeometric( alpha, Compensated, theta, w, 40000, love, &DefaultEarthModel,
                                  &u, &v, &g );
-    
-    //printf( "%e %e %e\n", uC, vC, gC );
-    //printf( "%e %e %e\n", u, v, g );
-    //printf( "%e %e %e\n", fabs( ( uC - u ) / u ), fabs( ( vU - v ) / v ), fabs( ( gC - g ) / g ) );    
-    
+
+    ASSERT( fabs(diskload_core_H(alpha,theta) - diskload_core_H_truncated(alpha,theta)) < 1e-4 );
+
     ASSERT( e == E_SUCCESS );
-    ASSERT( fabs( ( uC - u ) / u ) < 10e-5 );
-    ASSERT( fabs( ( vC - v ) / v ) < 10e-5 );
-    ASSERT( fabs( ( gC - g ) / g ) < 10e-5 );
+    ASSERT( fabs( ( uC - u ) / u ) < 1e-4 );
+    ASSERT( fabs( ( vC - v ) / v ) < 1e-4 );
+    ASSERT( fabs( ( gC - g ) / g ) < 1e-4 );
   }
+
+  SECTION( "Core G(x,y)" );
   
+  ASSERT( fabs(diskload_core_G(0.1,0.2) - 0.025898198318164894) < 1e-6 );
+
+  SECTION( "Core H(x,y)" );
+
+  printf( "core h = %f\n", diskload_core_H(0.1,0.2) );
+  ASSERT( fabs(diskload_core_H(0.1,0.2) - 0.13628256838730426) < 1e-6 );
+  ASSERT( fabs(diskload_core_H_truncated(0.1,0.2) - 0.13628256838730426) < 1e-6 );    
+  
+  ASSERT( fabs(diskload_hypergeometric_core_G(0.1,0.2) - 0.025898198318164894) < 1e-6 );
+
   /*
   e = diskload_core( alpha, Compensated, theta, w, diskload_hypergeometric_core, 40000, love, &DefaultEarthModel,
                                         &u, &v, &g );

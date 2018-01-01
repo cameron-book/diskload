@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <math.h>
 #include <gsl/gsl_sf_ellint.h>
 #include <gsl/gsl_complex.h>
@@ -61,39 +62,8 @@ double gsl_sf_ellint_F_extended (double phi, double k, gsl_mode_t mode) {
 
   double sine = k*sin(phi);
   if (sine <= 1) return gsl_sf_ellint_F(asin(sine),1.0/k,mode)/k;
+  
   return GSL_REAL(gsl_sf_ellint_Fz(gsl_complex_arcsin_real(sine),1.0/k,mode))/k;
-}
-
-gsl_complex gsl_sf_ellint_Pcomp_z (double k, double n, gsl_mode_t mode) {
-  printf( "computing PI(k=%f,n=%f)\n", k, n );
-
-  if (fabs(n) > 10e100) return gsl_complex_rect( 0, 0 );
-  if (fabs(k) > 10e100) return gsl_complex_rect( 0, 0 );  
-  
-  if ((k == 0) && (n == 0)) {
-    return gsl_complex_rect( M_PI/2, 0 );
-  }
-
-  if (k < 0) {
-    return gsl_sf_ellint_Pcomp_z (-k, n, mode);
-  }
-  
-  if (k < 1) {
-    printf( "PI = %f\n", gsl_sf_ellint_Pcomp (k, n, mode) );
-
-    return gsl_complex_rect( gsl_sf_ellint_Pcomp (k, n, mode), 0 );
-  }
-
-  gsl_complex lhs = gsl_complex_div_real(gsl_sf_ellint_Pcomp_z( 1/k, n/k/k, mode ), k );
-  gsl_complex rhs = gsl_sf_ellint_Pcomp_z(sqrt(1-k*k), -(-n * (1 - k*k))/(-n - k*k), mode);
-  gsl_complex factor = gsl_complex_rect( 0, -(k*k/(k*k+n)) );
-
-  gsl_complex result  = gsl_complex_add(lhs, gsl_complex_mul(factor, rhs));
-
-  printf( "PI(k=%f,n=%f) = %f + I %f\n", k, n, GSL_REAL(result), GSL_IMAG(result) );
-  printf( "EllipticPi[%f,%f] - (%f + I*%f)\n", n, k*k, GSL_REAL(result), GSL_IMAG(result) );  
-  
-  return gsl_complex_add(lhs, gsl_complex_mul(factor, rhs));
 }
 
 // RC1y and gsl_sf_ellint_RJ_z are from mpmath;
@@ -239,8 +209,11 @@ gsl_complex gsl_sf_ellint_RJ_z (double x, double y, double z, double p, gsl_mode
 }
                 
 double gsl_sf_ellint_Pcomp_extended (double k, double n, gsl_mode_t mode) {
+   if ((k < 1) && (fabs(n) < 1)) return gsl_sf_ellint_Pcomp (k, n, mode);
+   
    const double y = 1.0 - k*k;
-   n = -n;
+
+   n = -n; // GSL's convention 
    return   gsl_sf_ellint_Kcomp_extended(k,mode)
        + (n/3.0) * GSL_REAL(gsl_sf_ellint_RJ_z(0.0, y, 1.0, 1.0 - n, mode));
 }

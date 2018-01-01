@@ -91,6 +91,8 @@ typedef struct {
   double* k;  /**< `k[i]` is the Love number \f$k_i\f$ with `i` between 0 and `degrees-1` */
 } LoveNumbers;
 
+void diskload_initialize(void);
+
 LoveNumbers* diskload_read_love_numbers(const char* filename);
 
 DiskLoadError diskload_truncated(double alpha,DiskLoadType icomp,double theta,double w,int nmax,LoveNumbers* LN,const EarthModel* EM, double *u, double *v, double *g);
@@ -103,8 +105,13 @@ typedef double (*ComputationalCore)(double, double);
 DiskLoadError diskload_core(double alpha,DiskLoadType icomp,double theta,double w,ComputationalCore coreG, ComputationalCore coreH,int nmax,LoveNumbers* LN,const EarthModel* earth, double *u, double *v, double *g);
 DiskLoadError diskload_hypergeometric(double alpha,DiskLoadType icomp,double theta,double w,int nmax,LoveNumbers* LN,const EarthModel* earth, double *u, double *v, double *g);
 
+DiskLoadError diskload_point(double theta,double w,int nmax,LoveNumbers* LN,const EarthModel* earth, double *u, double *v, double *g);
+
 double diskload_hypergeometric_core_G(double x,double y);
 double diskload_core_H(double x,double y);
+double diskload_core_G(double x,double y);
+double diskload_core_M(double x,double y);
+double diskload_core_H_truncated(double x,double y);
 
 void diskload_perror( const char* str );
 
