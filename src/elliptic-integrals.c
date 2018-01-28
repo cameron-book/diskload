@@ -106,7 +106,7 @@ gsl_complex RC1y(gsl_complex y) {
              
 gsl_complex gsl_sf_ellint_RJ_z (double x, double y, double z, double p, gsl_mode_t mode) {
   // this is a tolerance and it should depend on mode
-  double r = 1e-8;
+  double r = 1e-12;
   
   if (!(isnormal(x) && isnormal(y) && isnormal(z) && isnormal(p))) {
     if (isnan(x) || isnan(y) || isnan(z) || isnan(p)) {
@@ -207,7 +207,16 @@ gsl_complex gsl_sf_ellint_RJ_z (double x, double y, double z, double p, gsl_mode
   
   return gsl_complex_add(v1,v2);
 }
-                
+
+double gsl_sf_ellint_Ecomp_extended (double k, gsl_mode_t mode) {
+  if (k < 1) return gsl_sf_ellint_Ecomp (k, mode);
+  
+  // because the real parts of EllipticE[m] and
+  // Sqrt[m]*⁢(E⁡llipticE[1/m]-(1-1/m)*Elliptic⁢K[1/m]) are equal
+  
+  return k * gsl_sf_ellint_Ecomp (1/k, mode) - (k - 1.0/k) * gsl_sf_ellint_Kcomp(1/k, mode);
+}
+
 double gsl_sf_ellint_Pcomp_extended (double k, double n, gsl_mode_t mode) {
    if ((k < 1) && (fabs(n) < 1)) return gsl_sf_ellint_Pcomp (k, n, mode);
    

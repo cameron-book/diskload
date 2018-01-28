@@ -39,12 +39,6 @@ int main( void ) {
   double u, v, g;
   DiskLoadError e;
 
-  FILE* table = fopen("table-timings.tex", "w");
-  fprintf( table, "\\begin{table}[ht]\n" );
-  fprintf( table, "\\centering\n" );  
-  fprintf( table, "\\begin{tabular}{lS[table-format=3.2]}\n" );
-  fprintf( table, "method & {time (ms)} \\\\\n" );
-  fprintf( table, "\\hline\n" );  
 
 #define TRUNCATE(cutoff,name) \
   { \
@@ -52,7 +46,7 @@ int main( void ) {
   \
   for(i = 0; i<N; i++ ) { \
     alpha = (double)rand()/(double)(RAND_MAX/range); \
-    theta = (double)rand()/(double)(RAND_MAX/range); \  
+    theta = (double)rand()/(double)(RAND_MAX/range); \
     \
     e = diskload_truncated( alpha, Uncompensated, theta, w, cutoff, love, &DefaultEarthModel, &u, &v, &g ); \
   } \

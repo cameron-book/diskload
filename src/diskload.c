@@ -15,6 +15,8 @@
 #include "diskload.h"
 #include "tanhsinh.h"
 
+double diskload_core_H_slow(double x, double y);
+
 const double Degrees = M_PI / 180.0;
 
 const EarthModel DefaultEarthModel = { 6371.0, 9.8046961 };
@@ -432,6 +434,7 @@ DiskLoadError diskload_core(double alpha,DiskLoadType icomp,double theta,double 
   
 #ifndef DISKLOAD_NO_V    
   double coreDerivative = (*coreH)(alpha * Degrees,theta * Degrees);
+  printf( "coreDerivative = %g\n", coreDerivative );
 #endif
   
   double sigma;
@@ -449,6 +452,7 @@ DiskLoadError diskload_core(double alpha,DiskLoadType icomp,double theta,double 
 #ifndef DISKLOAD_NO_V  
   double l_oo = (nmax) * LN->l[nmax];
   *v = - sintheta * l_oo * coreDerivative / coreFactor;
+  printf( "initial v = %g\n", *v );
 #endif
 
 #ifndef DISKLOAD_NO_G
@@ -533,7 +537,7 @@ double hyperg_z_GT1 (double a, double b, double c, double z) {
   
   coef1=gsl_sf_gamma(c)*gsl_sf_gamma(b-a)*pow(1-z,-a)/(gsl_sf_gamma(b)*gsl_sf_gamma(c-a));
   coef2=gsl_sf_gamma(c)*gsl_sf_gamma(a-b)*pow(1-z,-b)/(gsl_sf_gamma(a)*gsl_sf_gamma(c-b));
-  double result = coef1*gsl_sf_hyperg_2F1(a,c-b,a-b+1,1/(1-z))+coef2*gsl_sf_hyperg_2F1(b,c-a,b-a+1,1/(1-z));
+  double result = coef1*gsl_sf_hyperg_2F1(a,c-b,a-b+1,1.0/(1-z))+coef2*gsl_sf_hyperg_2F1(b,c-a,b-a+1,1.0/(1-z));
 
   return result;
 }
@@ -582,11 +586,15 @@ double f_elliptic (double t, void *params) {
 
 double diskload_core_terms[LEVIN_U_TERMS];
 
+double diskload_core_H_bad(double x,double y) {
+  return diskload_core_H_truncated(x,y) - 0.000001149195;
+}
+
 double diskload_core_H_truncated(double x,double y) {
   x = cos(x);
   y = cos(y);
   
-  int nmax = 120000;
+  int nmax = 400000;
   double result = 0.0;
   int n;
 
@@ -736,19 +744,36 @@ double diskload_core_G(double x, double y) {
   x = x/2;
   y = y/2;  
   
-  double factor = (cos(x)/sin(y) + sin(y)/cos(x) - (cos(y)/tan(y)/cos(x) + sin(x)*tan(x)/sin(y)))/M_PI;
-  double k = tan(x)/tan(y);
-  gsl_complex u = gsl_complex_arcsin_real(tan(y)/tan(x));
-  double n = (sin(x)/sin(y))*(sin(x)/sin(y));
+  long double factor = (cosl(x)/sinl(y) + sinl(y)/cosl(x) - (cosl(y)/tanl(y)/cosl(x) + sinl(x)*tanl(x)/sinl(y)))/M_PI;
+  long double k = tanl(x)/tanl(y);
+  gsl_complex u = gsl_complex_arcsin_real(tanl(y)/tanl(x));
+  long double n = (sinl(x)/sinl(y))*(sinl(x)/sinl(y));
 
-  double complete = gsl_sf_ellint_Kcomp_extended(k,mode) -
-                    gsl_sf_ellint_Pcomp_extended(k,-n,mode);
+  long double complete = gsl_sf_ellint_Kcomp_extended(k, mode) - 
+                         gsl_sf_ellint_Pcomp_extended(k, -n, mode);
+  
+  printf( "mpmath.ellipk(%.12Le) = %.12e\n", k*k, gsl_sf_ellint_Kcomp_extended(k,mode) );
+  printf( "mpmath.ellippi(%.12e,%.12e) = %.12e\n", (double)(n), (double)(k*k), gsl_sf_ellint_Pcomp_extended(k,-n,mode) );
 
-  double incomplete = GSL_REAL(gsl_sf_ellint_Fz(u,k,mode)) -
-                      gsl_sf_ellint_Pcomp_extended(1/k,-n/k/k,mode) / k;
+  long double incomplete = GSL_REAL(gsl_sf_ellint_Fz(u,k,mode)) -
+                           gsl_sf_ellint_Pcomp_extended(1.0/k,-n/k/k,mode) / k;
 
+  printf( "mpmath.ellipf(%.12e + %.12e * I,%.12Le) = %.12e\n", GSL_REAL(u), GSL_IMAG(u), k*k, GSL_REAL(gsl_sf_ellint_Fz(u,k,mode)) );
+
+  printf( "mpmath.ellippi(%.12e,%.12e)/%.12e = %.12e\n",
+          (double)(n/k/k), (double)(1.0/k/k), (double)(k),
+          (double)(gsl_sf_ellint_Pcomp_extended(1.0/k,-n/k/k,mode) / k) );
+  printf( "gsl_sf_ellint_Pcomp_extended(%.12e,%.12e,mode)\n", 
+          (double)(1.0/k),(double)(-n/k/k) );
+
+  printf( "1/k = %.12Le\n", 1.0/k );
+  printf( "n/k/k = %.12Le\n", n/k/k );
+  
+  printf( "incomplete = %.12Le\n", incomplete );
+  
   return 1.0 - factor*(incomplete + complete);
 }
+
 
 /**
  * @brief compute disk load via integrals of hypergeometric functions
@@ -759,7 +784,7 @@ double diskload_core_G(double x, double y) {
  * @return a `DiskLoadError` which is E_SUCCESS if successful
  ****************************************************************************************/
 DiskLoadError diskload_hypergeometric(double alpha,DiskLoadType icomp,double theta,double w,int nmax,LoveNumbers* LN,const EarthModel* earth, double *u, double *v, double *g) {
-  return diskload_core(alpha,icomp,theta,w,diskload_core_G, diskload_core_H_truncated, nmax,LN,earth,u,v,g);
+  return diskload_core(alpha,icomp,theta,w,diskload_core_G, diskload_core_H, nmax,LN,earth,u,v,g);
 }
 
 /**
@@ -952,7 +977,10 @@ double H(double y, void *params) {
   return result; 
 }
 
-double diskload_core_H_bad(double x, double y) {
+double diskload_core_H_deriv(double x, double y) {
+  x = cos(x);
+  y = cos(y);
+  
   gsl_function F;
   
   double result, abserr;
@@ -996,33 +1024,233 @@ double integrand (double t, const void *params) {
 
 // https://github.com/Rufflewind/tanhsinh
 
-double diskload_core_M(double x, double y) {
+double diskload_core_M_slow(double x, double y) {
   x = cos(x);
   y = cos(y);
   
-  double abs_error = 1.0e-8;	/* to avoid round-off problems */  
-  double params[2] = {x,y};
+  double abs_error = 1.0e-6;	/* to avoid round-off problems */  
+  double params[3] = {x,y};
 
   double result = 0.0;
   result += tanhsinh_quad(integrand, params,
                           -1 + DBL_EPSILON, fmin(x,y) - DBL_EPSILON, abs_error,
-                          NULL, NULL);
-  result += tanhsinh_quad(integrand, params,
-                          fmin(x,y) + DBL_EPSILON, fmax(x,y) - DBL_EPSILON, abs_error,
-                          NULL, NULL);
+                          NULL, NULL) / M_PI;
+  
+  result += -fabs(x-y)/2.0;
+  
   result += tanhsinh_quad(integrand, params,
                           fmax(x,y) + DBL_EPSILON, 1.0 - DBL_EPSILON, abs_error,
-                          NULL, NULL);
-  return result / M_PI;
+                          NULL, NULL) / M_PI;
+  return result;
+}
+
+// Provided x or y is negative, this is the integral of sqrt((t*t*(-x + t)/(-y + t)/(1-t*t))) from t = -1 to t = min(x,y); note that side(-x,-y) is the integral of the same from t = max(x,y) to 1
+double one_side(double x,double y) {
+  const gsl_mode_t mode = GSL_PREC_DOUBLE;
+
+  double m = ((-1 + x)*(1 + y))/((1 + x)*(-1 + y));
+  double k = sqrt(m);
+  gsl_complex u = gsl_complex_arcsin_real(sqrt(((1 + x)*(-1 + y))/((-1 + x)*(1 + y))));
+
+  // EllipticE[ArcCsc[Sqrt[m]], m] // FunctionExpand  
+  //double EE = mpmath.ellipe(phi, m);
+  //double EE = k*(gsl_sf_ellint_Ecomp_extended(1/k,mode) + (-1 + 1/m)*gsl_sf_ellint_Kcomp_extended(1/k,mode));
+  double EE = gsl_sf_ellint_Ecomp_extended(k,mode);
+
+  double EF = GSL_REAL(gsl_sf_ellint_Fz(u,k,mode));
+
+  double n = (-1 + x)/(-1 + y);
+  //double EPI = mpmath.ellippi(n, phi, m);
+  // (EllipticPi[n/m, m^(-1)]/Sqrt[m]) == EllipticPi[n, ArcCsc[Sqrt[m]], m]
+  double EPI = gsl_sf_ellint_Pcomp_extended(1.0/k,-n/k/k,mode) / k;
+  
+  double result = -(EE*(1 + x)*(-1 + y) + (x - y)*(EF + EPI*(x-y) + EF*y))/sqrt(-((1 + x)*(-1 + y)));
+
+  return result;
+}
+
+double diskload_core_M(double x, double y) {
+  if ((x == 0) && (y == 0)) return 2;
+  
+  x = cos(x);
+  y = cos(y);  
+  
+  double middle = -M_PI * fabs(x-y)/2.0;
+
+  return (middle + one_side(x,y) + one_side(-x,-y)) / M_PI;
 }
 
 double diskload_core_H(double x, double y) {
-  double G = diskload_core_G(x,y);
-  double M = diskload_core_M(x,y);
+  long double G = diskload_core_G(x,y);
+  printf( "gdiff = %.12Lf\n", G - 0.00025156762368938846588587262536634 );
+  long double M = diskload_core_M(x,y);
+  printf( "mdiff = %.12Lf\n", M - 0.000251567593076294593039689259839147 );
+  long double factor = -sinl(y)*tanl(y);
+  long double sine2 = sinl(y)*sinl(y);
   
-  x = cos(x);
-  y = cos(y);
+  //x = cos(x);
+  //y = cos(y);
+
+  printf("LHS=%.12Lf\n", (G - (1-cosl(x)))/factor );
+  printf("RHS=%.12Lf\n", M/sine2 );
+
+  printf("sin*Gblagh=%.12Lf\n", sine2*(G - (1-cosl(x)))/factor );
+  printf("M=%.12Lf\n", M );
+
+  //return (- (G - (1-cosl(x)))/tanl(y) + M/sinl(y))/sinl(y);
+  return (M - G*cosl(y) + cosl(y) - cosl(x)*cosl(y))/sine2;
+}
+
+double diskload_core_M_together(double x, double y) {
+  if ((x == 0) && (y == 0)) return 2;
+
+  long double result = -fabsl(cosl(x)-cosl(y))/2.0;
   
-  return ((G - (1-x)) * y  - M) / (y*y - 1);
+  const gsl_mode_t mode = GSL_PREC_DOUBLE;
+
+  x = x/2;
+  y = y/2;  
+  
+  long double m = tanl(x)*tanl(x)/tanl(y)/tanl(y);
+  long double k = fabsl(tanl(x)/tanl(y));
+
+  gsl_complex u = gsl_complex_arcsin_real(tanl(y)/tanl(x));
+  long double EE = gsl_sf_ellint_Ecomp_extended(k,mode);
+  long double EF = GSL_REAL(gsl_sf_ellint_Fz(u,k,mode));
+  long double n = sinl(x)*sinl(x)/sinl(y)/sinl(y);
+  long double EPI = gsl_sf_ellint_Pcomp_extended(1.0/k,-n/k/k,mode) / k;
+  
+  // same thing with -x and -y
+  long double EE2 = gsl_sf_ellint_Ecomp_extended(1.0/k,mode);
+
+  u = gsl_complex_arcsin_real(tanl(x)/tanl(y));  
+  long double EF2 = GSL_REAL(gsl_sf_ellint_Fz(u,1.0/k,mode));
+
+  n = cosl(x)*cosl(x)/cosl(y)/cosl(y);
+  long double EPI2 = gsl_sf_ellint_Pcomp_extended(k,-n*k*k,mode) * k;
+
+  return result + (fabsl(cosl(x))*fabsl(sinl(y))*
+                   (EE2 - EPI2*cosl(2*x)*cosl(2*x) + 
+          cosl(2*x)*(-EE2 + EF2 - 
+             (EE2 + EF2 - 2*EPI2)*cosl(2*y)) + 
+          cosl(2*y)*(EE2 - EF2 + (EF2 - EPI2)*cosl(2*y))) + 
+       fabsl(cosl(y))*fabsl(sinl(x))*
+        (-((cosl(2*x) - cosl(2*y))*
+             (EF + EPI*cosl(2*x) + (EF - EPI)*cosl(2*y))) + 
+         4*EE*cosl(x)*cosl(x)*sinl(y)*sinl(y)))/
+      (2.*M_PI*fabsl(cosl(x)*cosl(y)*sinl(x)*sinl(y)));
+}
+
+
+////////////////////////////////////////////////////////////////
+
+double diskload_core_H_separated(double x, double y) {
+  const gsl_mode_t mode = GSL_PREC_DOUBLE;
+  long double factor = -sinl(y)*tanl(y);
+  long double sine2 = sinl(y)*sinl(y);
+
+  long double G = diskload_core_G(x,y);
+  long double M = diskload_core_M(x,y);
+
+  return (G - (1-cosl(x)))/factor + M/sine2;
+}
+
+double diskload_core_H_fast(double x, double y) {
+  const gsl_mode_t mode = GSL_PREC_DOUBLE;
+  double factor2 = -sin(y)*tan(y);
+  double sine2 = sin(y)*sin(y);
+  
+  x = x/2;
+  y = y/2;  
+
+  double k = fabs(tan(x)/tan(y));
+  //printf( "k = %.12f\n", k );
+  gsl_complex u = gsl_complex_arcsin_real(tan(y)/tan(x));
+  double n = (sin(x)/sin(y))*(sin(x)/sin(y));
+  //printf( "n = %.12f\n", n );
+  
+  double EK = gsl_sf_ellint_Kcomp_extended(k,mode);
+  double EE = gsl_sf_ellint_Ecomp_extended(k,mode);
+  
+  double EF = GSL_REAL(gsl_sf_ellint_Fz(u,k,mode));
+  n = sin(x)/sin(y)*sin(x)/sin(y);
+  double EPI = gsl_sf_ellint_Pcomp_extended(1.0/k,-n/k/k,mode) / k;
+  double EPI3 = gsl_sf_ellint_Pcomp_extended(k,-n,mode);
+
+  // same thing with -x and -y
+  double EE2 = gsl_sf_ellint_Ecomp_extended(1.0/k,mode);
+  u = gsl_complex_arcsin_real(tan(x)/tan(y));  
+  double EF2 = GSL_REAL(gsl_sf_ellint_Fz(u,1.0/k,mode));
+  n = cos(x)*cos(x)/cos(y)/cos(y);
+  double EPI2 = gsl_sf_ellint_Pcomp_extended(k,-n*k*k,mode) * k;
+  
+  double middle = -fabs(cos(2*x)-cos(2*y))/2.0/sin(2*y)/sin(2*y);
+
+  double M = (EF-EPI+EK-EPI3)*(cos(2*x)-cos(2*y))*cos(2*y)/sin(y)/sin(y)/sin(y)/cos(x)/cos(y)/cos(y)/4/M_PI + (fabs(cos(x))*fabs(sin(y))*(EE2 - EPI2*cos(2*x)*cos(2*x) + 
+          cos(2*x)*(-EE2 + EF2 - 
+             (EE2 + EF2 - 2*EPI2)*cos(2*y)) + 
+          cos(2*y)*(EE2 - EF2 + (EF2 - EPI2)*cos(2*y))) + 
+       fabs(cos(y))*fabs(sin(x))*
+        (-((cos(2*x) - cos(2*y))*
+             (EF + EPI*cos(2*x) + (EF - EPI)*cos(2*y))) + 
+         4*EE*cos(x)*cos(x)*sin(y)*sin(y)))/
+             (2*M_PI*fabs(4*cos(x)*cos(y)*cos(y)*cos(y)*sin(x)*sin(y)*sin(y)*sin(y)));
+
+  //printf("factortest=%.12f\n", (-(cos(2*x)-cos(2*y))*(cos(2*x)-cos(2*y))/sin(y)/sin(y)/2.0) );
+  
+      M = ((2*(EE2*(2*sin(x)*sin(x)/tan(y)/tan(y)) + 
+                  EPI2*(-(cos(2*x)-cos(2*y))*(cos(2*x)-cos(2*y))/sin(y)/sin(y)/2.0) + 
+                  (EF2)*(cos(2*x) - cos(2*y)) 
+               ))/cos(y)/cos(y)/cos(y)/sin(x) + 
+           ((-cos(2*x) + cos(2*y))/cos(y)*
+          (2*(-EF - EK + EPI + EPI3)*cos(2*y) + 
+           (EF + EF*cos(2*y) + (EPI)*(cos(2*x)-cos(2*y)))) + 
+            4*EE*cos(x)*cos(x)*sin(y)*tan(y))/sin(y)/sin(y)/sin(y)/cos(x)/cos(y))/(8*M_PI);
+
+      double lhs = EE2*4*sin(x)/sin(y)/sin(y)/cos(y) -
+                   EPI2*(cos(2*x)-cos(2*y))*(cos(2*x)-cos(2*y))/sin(x)/sin(y)/sin(y)/cos(y)/cos(y)/cos(y) +
+                   2*(EF2)*(cos(2*x) - cos(2*y))/cos(y)/cos(y)/cos(y)/sin(x);
+      double rhs = ((-cos(2*x) + cos(2*y))*
+                    (2*(- EK + EPI3)*cos(2*y) + 
+                     EF*(1-cos(2*y)) +
+                     (EPI)*(cos(2*x)+cos(2*y)))/cos(y) + 
+                    4*EE*cos(x)*cos(x)*sin(y)*tan(y))
+                   /sin(y)/sin(y)/sin(y)/cos(x)/cos(y);
+
+      double sum = 0.0;
+      double diff = -cos(2*x) + cos(2*y);
+      
+      //printf( "Sum = %.12f\n", sum );
+            
+      //printf( "Sum = %.12f\n", sum );
+      sum += EE2*4*sin(x)/sin(y)  /sin(y)/cos(y);
+      //printf( "Sum = %.12f\n", sum );
+      
+      sum += EE*4*cos(x)/cos(y) /sin(y)/cos(y);
+      //printf( "Sum = %.12f\n", sum );
+
+      double diffed = 0.0;
+      diffed -= EPI2*diff*diff/sin(x)/cos(y)/cos(y)/cos(y)/sin(y)/sin(y);
+      //printf( "Suma = %.12f\n", diffed );
+      diffed -= 2*(EF2)*diff/cos(y)/cos(y)/cos(y)/sin(x);
+      //printf( "Suma = %.12f\n", diffed );
+      diffed += EF*(1-cos(2*y))*diff/cos(y)/sin(y)/sin(y)/sin(y)/cos(x)/cos(y);
+      //printf( "Suma = %.12f\n", diffed );
+
+      sum += diffed;
+      sum += 2*(- EK + EPI3)*cos(2*y)*diff/cos(y)/sin(y)/sin(y)/sin(y)/cos(x)/cos(y);
+      //printf( "Sum = %.12f\n", sum );
+      sum += 8*M_PI*middle;
+      //printf( "Sum = %.12f\n", sum );
+
+      //printf( "EPI = %.12e\n", EPI );
+      sum += (EPI)*(cos(2*x)+cos(2*y))*(diff)/cos(y)/cos(x)/cos(y)/sin(y)/sin(y)/sin(y);
+      //printf( "adding %.12e\n", (EPI)*(cos(2*x)+cos(2*y))*(diff)/cos(y)/sin(y)/sin(y)/sin(y)/cos(x)/cos(y) );
+      //printf( "Sum = %.12e\n", sum );
+      sum -= 8*M_PI*cos(2*x)/sin(2*y)/tan(2*y);            
+      //printf( "Sum = %.12f\n", sum );
+      
+      return sum/8/M_PI;  
+      //return (G - (1-x))/factor + M/sine2;
 }
 

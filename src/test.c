@@ -63,10 +63,10 @@ int main( void ) {
   // Fail because we haven't extrapolated the Love numbers
   ASSERT( e == E_LOVE_NUMBER_VECTOR_TOO_SHORT );
 
-  SECTION( "Verify the truncated sum with N = 400k" );
-  diskload_extrapolate_love_numbers(love, 400000 );
+  SECTION( "Verify the truncated sum with N = 4M" );
+  diskload_extrapolate_love_numbers(love, 4000000 );
   double uU, vU, gU;
-  e = diskload_truncated( alpha, Uncompensated, theta, w, 400000, love, &DefaultEarthModel,
+  e = diskload_truncated( alpha, Uncompensated, theta, w, 4000000, love, &DefaultEarthModel,
                                         &uU, &vU, &gU );
   ASSERT( e == E_SUCCESS );
   ASSERT( fabs( ( -2.0446039399e+00 - uU ) / uU ) < epsilon );
@@ -94,7 +94,7 @@ int main( void ) {
                                         &u, &v, &g );
   ASSERT( e == E_SUCCESS );
   ASSERT( fabs( ( uU - u ) / u ) < 1e-6 );
-  ASSERT( fabs( ( vU - v ) / v ) < 1e-5 );  
+  ASSERT( fabs( ( vU - v ) / v ) < 1e-3 );  
   ASSERT( fabs( ( gU - g ) / g ) < 1e-6 );
 
   printf( "%e %e %e\n", uU, vU, gU );
@@ -105,6 +105,8 @@ int main( void ) {
     double range = 0.2;
     alpha = (double)rand()/(double)(RAND_MAX/range);
     theta = (double)rand()/(double)(RAND_MAX/range);    
+    alpha += 0.2;
+    theta += 0.5;    
     
     SECTION( "Test the globally compensated case via truncation with N = 400k" );
     double uC, vC, gC;
@@ -116,10 +118,23 @@ int main( void ) {
     SECTION( "Compensated hypergeometric (N = 40k) near truncated (N = 400k)" );
     printf( BLUE "   (alpha = %e, theta = %e)\n\n" RESET, alpha, theta );
     
-    e = diskload_hypergeometric( alpha, Compensated, theta, w, 40000, love, &DefaultEarthModel,
-                                 &u, &v, &g );
-
+    e = diskload_core(alpha, Compensated, theta, w, diskload_core_G, diskload_core_H,
+                      40000, love, &DefaultEarthModel,
+                      &u, &v, &g );
+    
     ASSERT( fabs(diskload_core_H(alpha,theta) - diskload_core_H_truncated(alpha,theta)) < 1e-4 );
+    const double Degrees = M_PI / 180.0;
+    printf( "%.12f,%.12f\n", alpha*Degrees,theta*Degrees );
+    printf( "coreH     = %.12f\n", diskload_core_H(alpha*Degrees,theta*Degrees) );
+    printf( "coreM     = %.12f\n", diskload_core_M(alpha*Degrees,theta*Degrees) );
+    printf( "coreG     = %.12f\n", diskload_core_G(alpha*Degrees,theta*Degrees) );        
+    //printf( "slow      = %.12f\n", diskload_core_H_slow(alpha*Degrees,theta*Degrees) );
+    printf( "bad       = %.12f\n", diskload_core_H_bad(alpha*Degrees,theta*Degrees) );        
+    printf( "truncated = %.12f\n", diskload_core_H_truncated(alpha*Degrees,theta*Degrees) );
+    printf( "truncated - bad  = %.12f\n", diskload_core_H_bad(alpha*Degrees,theta*Degrees) - diskload_core_H_truncated(alpha*Degrees,theta*Degrees) );
+    printf( "core - truncated = %.12f\n", diskload_core_H(alpha*Degrees,theta*Degrees) - diskload_core_H_truncated(alpha*Degrees,theta*Degrees) );    
+    printf( "vC = %.12f\n", vC );
+    printf( "v = %.12f\n", v );    
 
     ASSERT( e == E_SUCCESS );
     ASSERT( fabs( ( uC - u ) / u ) < 1e-4 );
@@ -133,7 +148,35 @@ int main( void ) {
 
   SECTION( "Core H(x,y)" );
 
-  printf( "core h = %f\n", diskload_core_H(0.1,0.2) );
+  printf( "core h = %.12f\n", diskload_core_H(0.1,0.2) );
+  printf( "core h - h' = %.12f\n", diskload_core_H(0.05,0.15) - diskload_core_H_truncated(0.05,0.15) );
+  printf( "core h - h' = %.12f\n", diskload_core_H(0.001,0.0001) - diskload_core_H_truncated(0.001,0.0001) );
+
+  {
+  double x = 0.2; double y = -0.3;
+  printf("M(%f,%f) = %.12f\n", x, y, diskload_core_M(x,y) );
+  }
+
+
+  {
+    const double Degrees = M_PI / 180.0;    
+    double x = 0.02*Degrees; double y = 0.01*Degrees;
+    printf("H(%f,%f) = %.12f\n", x/Degrees, y/Degrees, diskload_core_H(x,y) );
+    printf("Ht(%f,%f) = %.12f\n", x/Degrees, y/Degrees, diskload_core_H_truncated(x,y) );  
+  }
+
+  {
+  double x = 0.2; double y = -0.5;
+  printf("M(%f,%f) = %.12f\n", x, y, diskload_core_M(x,y) );
+  }
+
+
+    {
+  double x = -0.2; double y = 0.6;
+  printf("M(%f,%f) = %.12f\n", x, y, diskload_core_M(x,y) );
+  }
+
+  
   ASSERT( fabs(diskload_core_H(0.1,0.2) - 0.13628256838730426) < 1e-6 );
   ASSERT( fabs(diskload_core_H_truncated(0.1,0.2) - 0.13628256838730426) < 1e-6 );    
   

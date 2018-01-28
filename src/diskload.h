@@ -112,6 +112,8 @@ double diskload_core_H(double x,double y);
 double diskload_core_G(double x,double y);
 double diskload_core_M(double x,double y);
 double diskload_core_H_truncated(double x,double y);
+double diskload_core_H_slow(double x,double y);
+double diskload_core_H_bad(double x,double y);
 
 void diskload_perror( const char* str );
 

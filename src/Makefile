@@ -3,7 +3,7 @@ elliptic-integrals-test: elliptic-integrals-test.c elliptic-integrals.c tanhsinh
 	./elliptic-integrals-test
 
 test: test.c diskload.c elliptic-integrals.c tanhsinh.c
-	gcc -O2 -o test diskload.c test.c elliptic-integrals.c tanhsinh.c `pkg-config --cflags --libs gsl`
+	gcc -O1 -o test diskload.c test.c elliptic-integrals.c tanhsinh.c `pkg-config --cflags --libs gsl`
 	./test
 
 benchmark: benchmark.c diskload.c elliptic-integrals.c tanhsinh.c

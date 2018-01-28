@@ -36,6 +36,17 @@ int main( void ) {
   ASSERT( EQUALS(gsl_sf_ellint_Kcomp_extended( 1.1, mode ), 2.1108400334328372 ) );
   ASSERT( EQUALS(gsl_sf_ellint_Kcomp_extended( 17, mode ), 0.09247987048715488822381078398 ) );
 
+  SECTION( "Verify that E(k) is defined for small k." );
+
+  ASSERT( EQUALS(gsl_sf_ellint_Ecomp_extended( 0.1, mode ), 1.56686194202166829122047497 ) );
+  ASSERT( EQUALS(gsl_sf_ellint_Ecomp_extended( 0.9, mode ), 1.171697052781614141185913957 ) );
+
+  SECTION( "Verify that E(k) is defined for large k." );
+  
+  ASSERT( EQUALS(gsl_sf_ellint_Ecomp_extended( 1.1, mode ), 0.8330447336303757625204966 ) );
+  ASSERT( EQUALS(gsl_sf_ellint_Ecomp_extended( 17, mode ), 0.046219900592664979223169411572 ) );
+
+  
   SECTION( "Verify that F(phi,k) is defined for small k." );
 
   ASSERT( EQUALS(gsl_sf_ellint_F_extended( 0.2, 0.3, mode ), 0.20011923478531490626734858 ) );
@@ -79,6 +90,15 @@ int main( void ) {
   SECTION( "Verify that Π(k,n) is defined when k > 1 and n < -1." );  
 
   ASSERT( EQUALS(gsl_sf_ellint_Pcomp_extended( 2.0, -1.00754, mode ), -9.517077071840008254392703704619 ) );
+  ASSERT( EQUALS(gsl_sf_ellint_Pcomp_extended( 2.0, -1.0005, mode ), -39.5929134254623600933 ) );
+  ASSERT( EQUALS(gsl_sf_ellint_Pcomp_extended( 2.0, -1.00005, mode ), -127.28094159795516249 ) );
+  ASSERT( EQUALS(gsl_sf_ellint_Pcomp_extended( 2.0, -1.000005, mode ), -404.6009105395591722509614 ) );
+  ASSERT( EQUALS(gsl_sf_ellint_Pcomp_extended( 2.0, -1.005, mode ), -11.88909640593311973913263 ) );
+  ASSERT( EQUALS(gsl_sf_ellint_Pcomp_extended( 2.0, -1.05, mode ), -3.20414718362604504340090 ) );
+  
+  ASSERT( EQUALS(gsl_sf_ellint_Pcomp_extended( 2.0, -1.1, mode ), -2.063629089065250647176143436603 ) );
+  
+  printf( "%.12e\n", gsl_sf_ellint_Pcomp_extended(2.005020918400e+00,-1.007543982411e+00,mode) );
 
   printf( CYAN "\n   %d tests; %d passed.\n\n" RESET, tests, successes );  
   

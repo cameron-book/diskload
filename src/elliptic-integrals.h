@@ -7,6 +7,7 @@
 gsl_complex gsl_sf_ellint_RJ_z (double x, double y, double z, double p, gsl_mode_t mode);
 
 double gsl_sf_ellint_Kcomp_extended (double k, gsl_mode_t mode);
+double gsl_sf_ellint_Ecomp_extended (double k, gsl_mode_t mode);
 double gsl_sf_ellint_Pcomp_extended (double k, double n, gsl_mode_t mode);
 double gsl_sf_ellint_F_extended (double phi, double k, gsl_mode_t mode);
 
