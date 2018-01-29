@@ -6,6 +6,8 @@ from mpmath import re, sqrt
 from mpmath import ellipk, ellippi, ellipf, ellipe
 import diskload.earth as earth
 
+mpmath.mp.dps = 22
+
 # This is really G(cos(x),cos(y))
 def elliptic_core_g(x,y):
   x = x/2
