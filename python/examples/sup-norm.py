@@ -4,7 +4,7 @@ import random
 
 W = 1.0
 
-trials = 1500
+trials = 100
 
 love = diskload.love_numbers.read()
 love = diskload.love_numbers.extrapolate( love, 4000000 )
