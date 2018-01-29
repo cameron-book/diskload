@@ -12,7 +12,7 @@ love = diskload.love_numbers.extrapolate( love, 12000000 )
 csv = open('l2-norm.csv', 'w')
 csv.write("cutoff U V G\n")
 
-for cutoff in range(20000,400000,100000):
+for cutoff in range(20000,4000000,100000):
     uTotal = 0.0;
     vTotal = 0.0;
     gTotal = 0.0;    
