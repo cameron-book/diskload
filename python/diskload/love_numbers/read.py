@@ -5,7 +5,6 @@ from os.path import dirname
 def read(filepath = None):
     if filepath == None:
         filepath = pathlib.Path(dirname(__file__)).parent.parent.parent.joinpath("REF_6371_loading_love_numbers_0_40000.txt")
-        print(filepath)
 
     exponents = lambda s: float(s.decode('utf8').replace('D','E'))
     converters = {1:exponents,2:exponents,3:exponents}
