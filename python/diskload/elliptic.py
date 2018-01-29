@@ -20,8 +20,8 @@ def elliptic_core_g(x,y):
   u = asin(tan(y)/tan(x))
 
   complete = ellipk(m) - ellippi(n, m)
-  #incomplete = ellipf(u,m) - ellippi(n/k/k,1/m)/k
-  incomplete = ellipf(u,m) - ellippi(n,u,m)
+  incomplete = ellipf(u,m) - ellippi(n/k/k,1/m)/k
+  #incomplete = ellipf(u,m) - ellippi(n,u,m)
 
   return re(1.0 - factor*(incomplete + complete))
 
@@ -32,8 +32,8 @@ def one_side(x,y):
     EE = ellipe(m)
     EF = re(ellipf(u,m))
     n = (-1 + x)/(-1 + y)
-    #EPI = ellippi(n/m,1/m)/k
-    EPI = ellippi(n,u,m)
+    EPI = ellippi(n/m,1/m)/k
+    #EPI = ellippi(n,u,m)
     return re(-(EE*(1 + x)*(-1 + y) + (x - y)*(EF + EPI*(x-y) + EF*y))/sqrt(((1 + x)*(1 - y))))
 
 def elliptic_core_m(x,y):
