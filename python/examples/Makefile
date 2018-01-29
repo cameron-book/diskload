@@ -1,6 +1,9 @@
 l2-norm.csv: l2-norm.py
 	PYTHONPATH=.. python l2-norm.py
 
+sup-norm.csv: sup-norm.py
+	PYTHONPATH=.. python sup-norm.py
+
 data.csv: data.py
 	PYTHONPATH=.. python data.py
 
@@ -9,6 +12,9 @@ wide-data.csv: wide-data.py
 
 l2-norm.tex: l2-norm.gp l2-norm.csv
 	gnuplot l2-norm.gp
+
+sup-norm.tex: sup-norm.gp sup-norm.csv
+	gnuplot sup-norm.gp
 
 timings.tex table-timings.tex timings.gp timings.csv: timings.py
 	PYTHONPATH=.. python timings.py
@@ -38,7 +44,7 @@ fake-point-load.tex: fake-point-load.gp fake-point-load.csv
 %.tex: %.gp data.csv wide-data.csv
 	gnuplot $<
 
-assets.pdf: assets.tex graph-core-versus-400k.tex graph-core-versus-40k.tex graph-core-versus-4k.tex graph-core-versus-4m.tex graph-diskload-core.tex l2-norm.tex table-timings-u.tex table-timings-v.tex table-timings-g.tex timings-u.tex timings-v.tex timings-g.tex table-timings.tex timings.tex fake-point-load-difference.tex fake-point-load.tex
+assets.pdf: assets.tex graph-core-versus-400k.tex graph-core-versus-40k.tex graph-core-versus-4k.tex graph-core-versus-4m.tex graph-diskload-core.tex l2-norm.tex table-timings-u.tex table-timings-v.tex table-timings-g.tex timings-u.tex timings-v.tex timings-g.tex table-timings.tex timings.tex fake-point-load-difference.tex fake-point-load.tex sup-norm.tex
 	pdflatex assets.tex
 
 clean:

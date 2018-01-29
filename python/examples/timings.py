@@ -44,7 +44,7 @@ def elliptic():
     theta = random.uniform(0,interval)
     u, v, g = diskload.elliptic( alpha, diskload.Compensation.UNCOMPENSATED, theta, W, 40000, love, computeU=computeU, computeV=computeV, computeG=computeG )
     
-for cutoff in range(40000, 400000, 10000):
+for cutoff in range(100000, 4000000, 100000):
     import timeit
     time_spent = timeit.timeit("truncated(" + str(cutoff) + ")", setup="from __main__ import truncated, computeU, computeV, computeG",number=trials)*1000/trials
     
@@ -55,7 +55,7 @@ for cutoff in range(40000, 400000, 10000):
         name = name[:-3] + "\\mathrm{k}"
 
     print( "%.2f ms/%d-truncated diskload\n" % (time_spent,cutoff) );
-    if cutoff % 250000 == 0:
+    if cutoff % 500000 == 0:
         table.write( "truncated at $N = %s$ & %.2f \\\\\n" % ( name, time_spent ) )
 
 core_time = timeit.timeit("elliptic()", setup="from __main__ import elliptic, computeU, computeV, computeG",number=trials)*1000/trials
