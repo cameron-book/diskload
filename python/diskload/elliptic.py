@@ -16,11 +16,12 @@ def elliptic_core_g(x,y):
   factor = (cos(x)/sin(y) + sin(y)/cos(x) - (cos(y)/tan(y)/cos(x) + sin(x)*tan(x)/sin(y)))/pi
   k = tan(x)/tan(y)
   m = k*k
-  u = asin(tan(y)/tan(x))
   n = (sin(x)/sin(y))*(sin(x)/sin(y))
+  u = asin(tan(y)/tan(x))
 
   complete = ellipk(m) - ellippi(n, m)
-  incomplete = ellipf(u,m) - ellippi(n/k/k,1/m)/k
+  #incomplete = ellipf(u,m) - ellippi(n/k/k,1/m)/k
+  incomplete = ellipf(u,m) - ellippi(n,u,m)
 
   return re(1.0 - factor*(incomplete + complete))
 
@@ -31,7 +32,8 @@ def one_side(x,y):
     EE = ellipe(m)
     EF = re(ellipf(u,m))
     n = (-1 + x)/(-1 + y)
-    EPI = ellippi(n/m,1/m)/k
+    #EPI = ellippi(n/m,1/m)/k
+    EPI = ellippi(n,u,m)
     return re(-(EE*(1 + x)*(-1 + y) + (x - y)*(EF + EPI*(x-y) + EF*y))/sqrt(((1 + x)*(1 - y))))
 
 def elliptic_core_m(x,y):
@@ -45,7 +47,7 @@ def elliptic_core_h(core_g,x,y):
     factor = -sin(y)*tan(y)
     sine2 = sin(y)*sin(y)
     return (M - core_g*cos(y) + cos(y) - cos(x)*cos(y))/sine2
-    
+
 def elliptic( alpha, icomp, theta, w, nmax, love_numbers, earth_model=earth.default, computeU=True, computeV=True, computeG=True ):
     core_value = float(elliptic_core_g(alpha * DEGREES,theta * DEGREES))
 
