@@ -26,10 +26,19 @@ timings-g.tex table-timings-g.tex timings-g.gp timings-g.csv: timings.py
 	PYTHONPATH=.. python timings.py g
 	gnuplot timings-g.gp
 
+fake-point-load.csv: fake-point-load.py
+	PYTHONPATH=.. python fake-point-load.py 
+
+fake-point-load-difference.tex: fake-point-load-difference.gp fake-point-load.csv
+	gnuplot fake-point-load-difference.gp
+
+fake-point-load.tex: fake-point-load.gp fake-point-load.csv
+	gnuplot fake-point-load.gp 
+
 %.tex: %.gp data.csv wide-data.csv
 	gnuplot $<
 
-assets.pdf: assets.tex graph-core-versus-400k.tex graph-core-versus-40k.tex graph-core-versus-4k.tex graph-core-versus-4m.tex graph-diskload-core.tex l2-norm.tex table-timings-u.tex table-timings-v.tex table-timings-g.tex timings-u.tex timings-v.tex timings-g.tex table-timings.tex timings.tex
+assets.pdf: assets.tex graph-core-versus-400k.tex graph-core-versus-40k.tex graph-core-versus-4k.tex graph-core-versus-4m.tex graph-diskload-core.tex l2-norm.tex table-timings-u.tex table-timings-v.tex table-timings-g.tex timings-u.tex timings-v.tex timings-g.tex table-timings.tex timings.tex fake-point-load-difference.tex fake-point-load.tex
 	pdflatex assets.tex
 
 clean:
@@ -37,13 +46,3 @@ clean:
 	rm -f graph-core-versus-400k.tex graph-core-versus-40k.tex graph-core-versus-4k.tex graph-core-versus-4m.tex graph-diskload-core.tex l2-norm.tex 
 
 
-fake-point-load-difference.tex: fake-point-load-difference.gp fake-point-load.csv
-	gnuplot fake-point-load-difference.gp 
-
-fake-point-load.csv: fake-point-load.c diskload.c elliptic-integrals.c tanhsinh.c
-	gcc -O2 -o fake-point-load diskload.c elliptic-integrals.c tanhsinh.c fake-point-load.c `pkg-config --cflags --libs gsl`
-	./fake-point-load
-
-fake-point-load-nearby.csv: fake-point-load.c diskload.c elliptic-integrals.c tanhsinh.c
-	gcc -DPOSTFIX=\"-nearby\" -DMIN_THETA=1.0 -DMAX_THETA=10.0 -O2 -o fake-point-load diskload.c elliptic-integrals.c tanhsinh.c fake-point-load.c `pkg-config --cflags --libs gsl`
-	./fake-point-load
