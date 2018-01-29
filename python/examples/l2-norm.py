@@ -4,7 +4,7 @@ import random
 
 W = 1.0
 
-trials = 100
+trials = 2500
 
 love = diskload.love_numbers.read()
 love = diskload.love_numbers.extrapolate( love, 4000000 )
@@ -12,7 +12,7 @@ love = diskload.love_numbers.extrapolate( love, 4000000 )
 csv = open('l2-norm.csv', 'w')
 csv.write("cutoff U V G\n")
 
-for cutoff in range(40000,4000000,250000):
+for cutoff in range(20000,4000000,20000):
     uTotal = 0.0;
     vTotal = 0.0;
     gTotal = 0.0;    

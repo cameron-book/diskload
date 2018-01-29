@@ -6,7 +6,7 @@ uncompensated = diskload.Compensation.UNCOMPENSATED
 love = diskload.love_numbers.read()
 love = diskload.love_numbers.extrapolate( love, 4000000 )
 
-N = 100
+N = 1000
 w = 1.0
 
 alpha = 0.1

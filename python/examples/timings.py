@@ -19,9 +19,6 @@ if len(sys.argv) > 1:
     computeG = (postfix == "-g")    
     title = "for $" + sys.argv[1].upper() + "$"
 
-
-
-
 table = open("table-timings" + postfix + ".tex","w")
 interval = 0.2
 
@@ -34,22 +31,20 @@ table.write( "\\hline\n" )
 timings = open("timings" + postfix + ".csv", "w")
 timings.write( "cutoff milliseconds\n" )
 
-trials = 100
+trials = 2000
 W = 1.0
 
 def truncated(cutoff):
     alpha = random.uniform(0,interval)
     theta = random.uniform(0,interval)
     u, v, g = diskload.truncated( alpha, diskload.Compensation.UNCOMPENSATED, theta, W, cutoff, love, computeU=computeU, computeV=computeV, computeG=computeG )
-    
 
 def elliptic():
     alpha = random.uniform(0,interval)
     theta = random.uniform(0,interval)
     u, v, g = diskload.elliptic( alpha, diskload.Compensation.UNCOMPENSATED, theta, W, 40000, love, computeU=computeU, computeV=computeV, computeG=computeG )
     
-    
-for cutoff in range(10000, 100000, 30000):
+for cutoff in range(40000, 400000, 10000):
     import timeit
     time_spent = timeit.timeit("truncated(" + str(cutoff) + ")", setup="from __main__ import truncated, computeU, computeV, computeG",number=trials)*1000/trials
     
@@ -60,7 +55,8 @@ for cutoff in range(10000, 100000, 30000):
         name = name[:-3] + "\\mathrm{k}"
 
     print( "%.2f ms/%d-truncated diskload\n" % (time_spent,cutoff) );
-    table.write( "truncated at $N = %s$ & %.2f \\\\\n" % ( name, time_spent ) )
+    if cutoff % 250000 == 0:
+        table.write( "truncated at $N = %s$ & %.2f \\\\\n" % ( name, time_spent ) )
 
 core_time = timeit.timeit("elliptic()", setup="from __main__ import elliptic, computeU, computeV, computeG",number=trials)*1000/trials
 table.write( "core method & %.2f  \\\\\n" % core_time )
