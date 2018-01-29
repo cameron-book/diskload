@@ -59,7 +59,7 @@ for cutoff in range(100000, 4000000, 100000):
         table.write( "truncated at $N = %s$ & %.2f \\\\\n" % ( name, time_spent ) )
 
 core_time = timeit.timeit("elliptic()", setup="from __main__ import elliptic, computeU, computeV, computeG",number=trials)*1000/trials
-table.write( "core method & %.2f  \\\\\n" % core_time )
+table.write( "analytic method & %.2f  \\\\\n" % core_time )
 print( "%.2f ms/hypergeometric diskload\n" % core_time )
     
 table.write(  "\\end{tabular}\n" )
@@ -77,6 +77,6 @@ gp.write( ("set terminal tikz\n"  +
             "set style line 1 dt 1 lc 'black'\n" +
             "set arrow from graph 0, first %f to graph 1, first %f nohead lc rgb 'gray'\n" +
             "set style textbox opaque noborder\n" +
-            "set title 'Speed of core method and series truncation " + title + "'\n" +
-            "set label 'core method' at graph 0.7, first %f boxed front\n" +
+            "set title 'Speed of analytic method versus series truncation " + title + "'\n" +
+            "set label 'analytic method' at graph 0.7, first %f boxed front\n" +
             "plot 'timings" + postfix +  ".csv' using (column('cutoff')):(column('milliseconds')) with lines ls 1 title 'series truncation'\n") % ( core_time, core_time, core_time ) )
