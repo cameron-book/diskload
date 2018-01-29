@@ -6,5 +6,5 @@ from .truncated import *
 from .compensation import *
 from .core import *
 from .elliptic import *
-
+from .point import *
 
